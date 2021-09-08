@@ -85,6 +85,8 @@ typedef enum PCIExpLinkWidth {
 /* ARI */
 #define PCI_ARI_VER                     1
 #define PCI_ARI_SIZEOF                  8
+#define PCI_RCEC_EP_VER                 1
+#define PCI_RCEC_EP_SIZEOF              0x8
 
 /* AER */
 #define PCI_ERR_VER                     2
