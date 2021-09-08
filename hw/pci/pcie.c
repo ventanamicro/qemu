@@ -94,6 +94,9 @@ pcie_cap_v1_fill(PCIDevice *dev, uint8_t port, uint8_t type, uint8_t version)
 
     pci_set_long(exp_cap + PCI_EXP_DEVCAP, devcap);
 
+    if (type == PCI_EXP_TYPE_RC_EC || type == PCI_EXP_TYPE_RC_END)
+	    return;
+
     pci_set_long(exp_cap + PCI_EXP_LNKCAP,
                  (port << PCI_EXP_LNKCAP_PN_SHIFT) |
                  PCI_EXP_LNKCAP_ASPMS_0S |
@@ -236,8 +239,9 @@ int pcie_cap_init(PCIDevice *dev, uint8_t offset,
     /* Filling values common with v1 */
     pcie_cap_v1_fill(dev, port, type, PCI_EXP_FLAGS_VER2);
 
-    /* Fill link speed and width options */
-    pcie_cap_fill_slot_lnk(dev);
+    if (type != PCI_EXP_TYPE_RC_EC && type != PCI_EXP_TYPE_RC_END)
+        /* Fill link speed and width options */
+        pcie_cap_fill_slot_lnk(dev);
 
     /* Filling v2 specific values */
     pci_set_long(exp_cap + PCI_EXP_DEVCAP2,
@@ -275,10 +279,10 @@ int pcie_cap_v1_init(PCIDevice *dev, uint8_t offset, uint8_t type,
     return pos;
 }
 
-static int
-pcie_endpoint_cap_common_init(PCIDevice *dev, uint8_t offset, uint8_t cap_size)
+int
+pcie_endpoint_cap_common_init(PCIDevice *dev, uint8_t offset, uint8_t cap_size,
+		uint8_t type)
 {
-    uint8_t type = PCI_EXP_TYPE_ENDPOINT;
     Error *local_err = NULL;
     int ret;
 
@@ -288,7 +292,8 @@ pcie_endpoint_cap_common_init(PCIDevice *dev, uint8_t offset, uint8_t cap_size)
      * should instead be Root Complex Integrated Endpoints.
      */
     if (pci_bus_is_express(pci_get_bus(dev))
-        && pci_bus_is_root(pci_get_bus(dev))) {
+        && pci_bus_is_root(pci_get_bus(dev))
+        && type != PCI_EXP_TYPE_RC_EC) {
         type = PCI_EXP_TYPE_RC_END;
     }
 
@@ -307,12 +312,14 @@ pcie_endpoint_cap_common_init(PCIDevice *dev, uint8_t offset, uint8_t cap_size)
 
 int pcie_endpoint_cap_init(PCIDevice *dev, uint8_t offset)
 {
-    return pcie_endpoint_cap_common_init(dev, offset, PCI_EXP_VER2_SIZEOF);
+    return pcie_endpoint_cap_common_init(dev, offset,
+            PCI_EXP_VER2_SIZEOF, PCI_EXP_TYPE_ENDPOINT);
 }
 
 int pcie_endpoint_cap_v1_init(PCIDevice *dev, uint8_t offset)
 {
-    return pcie_endpoint_cap_common_init(dev, offset, PCI_EXP_VER1_SIZEOF);
+    return pcie_endpoint_cap_common_init(dev, offset,
+            PCI_EXP_VER1_SIZEOF, PCI_EXP_TYPE_ENDPOINT);
 }
 
 void pcie_cap_exit(PCIDevice *dev)
@@ -893,7 +900,7 @@ void pcie_cap_slot_write_config(PCIDevice *dev,
 
     hotplug_event_notify(dev);
 
-    /* 
+    /*
      * 6.7.3.2 Command Completed Events
      *
      * Software issues a command to a hot-plug capable Downstream Port by
