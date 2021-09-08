@@ -86,6 +86,10 @@ typedef enum PCIExpLinkWidth {
 #define PCI_ARI_VER                     1
 #define PCI_ARI_SIZEOF                  8
 
+#define PCI_RCEC_EP_VER                 1
+#define PCI_RCEC_EP_SIZEOF              0x8
+
+
 /* PASID */
 #define PCI_PASID_VER                   1
 #define PCI_EXT_CAP_PASID_MAX_WIDTH     20
