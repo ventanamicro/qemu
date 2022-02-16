@@ -450,6 +450,8 @@ struct RISCVCPUConfig {
     bool ext_smstateen;
     bool ext_sstc;
     bool ext_svinval;
+    bool ext_icbom;
+    bool ext_icboz;
     bool ext_svnapot;
     bool ext_svpbmt;
     bool ext_zdinx;
@@ -482,6 +484,8 @@ struct RISCVCPUConfig {
     char *vext_spec;
     uint16_t vlen;
     uint16_t elen;
+    uint16_t cbom_blocksize;
+    uint16_t cboz_blocksize;
     bool mmu;
     bool pmp;
     bool epmp;
