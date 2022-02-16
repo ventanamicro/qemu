@@ -37,6 +37,7 @@ config RISCV_VIRT
     select RISCV_NUMA
     select GOLDFISH_RTC
     select MSI_NONBROKEN
+    select ACPI
     select PCI
     select PCI_EXPRESS_GENERIC_BRIDGE
     select PFLASH_CFI01
@@ -48,6 +49,8 @@ config RISCV_VIRT
     select SIFIVE_TEST
     select VIRTIO_MMIO
     select FW_CFG_DMA
+    select ACPI_PCI
+    select ACPI_HW_REDUCED
 
 config SIFIVE_E
     bool

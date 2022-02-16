@@ -45,6 +45,8 @@
 #include "hw/pci/pci.h"
 #include "hw/pci-host/gpex.h"
 #include "hw/display/ramfb.h"
+#include "hw/acpi/acpi.h"
+#include "hw/acpi/generic_event_device.h"
 
 /*
  * The virt machine physical address space used by some of the devices
@@ -88,6 +90,10 @@ static const MemMapEntry virt_memmap[] = {
     [VIRT_PCIE_ECAM] =   { 0x30000000,    0x10000000 },
     [VIRT_PCIE_MMIO] =   { 0x40000000,    0x40000000 },
     [VIRT_DRAM] =        { 0x80000000,           0x0 },
+};
+
+static MemMapEntry extended_memmap[] = {
+    [VIRT_HIGH_PCIE_MMIO] =     { 0x0, 256 * MiB },
 };
 
 /* PCIe high mmio is fixed for RV32 */
@@ -1037,9 +1043,11 @@ static inline DeviceState *gpex_pcie_init(MemoryRegion *sys_mem,
                                           hwaddr high_mmio_base,
                                           hwaddr high_mmio_size,
                                           hwaddr pio_base,
-                                          DeviceState *irqchip)
+                                          DeviceState *irqchip,
+                                          RISCVVirtState *vms)
 {
     DeviceState *dev;
+    PCIHostState *pci;
     MemoryRegion *ecam_alias, *ecam_reg;
     MemoryRegion *mmio_alias, *high_mmio_alias, *mmio_reg;
     qemu_irq irq;
@@ -1077,6 +1085,8 @@ static inline DeviceState *gpex_pcie_init(MemoryRegion *sys_mem,
         gpex_set_irq_num(GPEX_HOST(dev), i, PCIE_IRQ + i);
     }
 
+    pci = PCI_HOST_BRIDGE(dev);
+    vms->bus = pci->bus;
     return dev;
 }
 
@@ -1318,6 +1328,13 @@ static void virt_machine_init(MachineState *machine)
         virt_high_pcie_memmap.base = memmap[VIRT_DRAM].base + machine->ram_size;
         virt_high_pcie_memmap.base =
             ROUND_UP(virt_high_pcie_memmap.base, virt_high_pcie_memmap.size);
+        extended_memmap[VIRT_HIGH_PCIE_MMIO].base = virt_high_pcie_memmap.base;
+        extended_memmap[VIRT_HIGH_PCIE_MMIO].size = virt_high_pcie_memmap.size;
+    }
+
+    s->memmap = extended_memmap;
+    for (i = 0; i < ARRAY_SIZE(virt_memmap); i++) {
+        s->memmap[i] = virt_memmap[i];
     }
 
     /* register system main memory (actual RAM) */
@@ -1428,7 +1445,7 @@ static void virt_machine_init(MachineState *machine)
                    virt_high_pcie_memmap.base,
                    virt_high_pcie_memmap.size,
                    memmap[VIRT_PCIE_PIO].base,
-                   DEVICE(pcie_irqchip));
+                   DEVICE(pcie_irqchip), s);
 
     serial_mm_init(system_memory, memmap[VIRT_UART0].base,
         0, qdev_get_gpio_in(DEVICE(mmio_irqchip), UART0_IRQ), 399193,
@@ -1445,6 +1462,12 @@ static void virt_machine_init(MachineState *machine)
                                   drive_get(IF_PFLASH, 0, i));
     }
     virt_flash_map(s, system_memory);
+    s->oem_id = g_strndup(ACPI_BUILD_APPNAME6, 6);
+    s->oem_table_id = g_strndup(ACPI_BUILD_APPNAME8, 8);
+    if ((s->aia_type == VIRT_AIA_TYPE_APLIC_IMSIC) &&
+            (s->have_acpi == true)) {
+        virt_acpi_setup(s);
+    }
 }
 
 static void virt_machine_instance_init(Object *obj)
@@ -1525,6 +1548,22 @@ static void virt_set_aclint(Object *obj, bool value, Error **errp)
     s->have_aclint = value;
 }
 
+static bool virt_get_acpi(Object *obj, Error **errp)
+{
+    MachineState *ms = MACHINE(obj);
+    RISCVVirtState *s = RISCV_VIRT_MACHINE(ms);
+
+    return s->have_acpi;
+}
+
+static void virt_set_acpi(Object *obj, bool value, Error **errp)
+{
+    MachineState *ms = MACHINE(obj);
+    RISCVVirtState *s = RISCV_VIRT_MACHINE(ms);
+
+    s->have_acpi = value;
+}
+
 static void virt_machine_class_init(ObjectClass *oc, void *data)
 {
     char str[128];
@@ -1562,6 +1601,11 @@ static void virt_machine_class_init(ObjectClass *oc, void *data)
     sprintf(str, "Set number of guest MMIO pages for AIA IMSIC. Valid value "
                  "should be between 0 and %d.", VIRT_IRQCHIP_MAX_GUESTS);
     object_class_property_set_description(oc, "aia-guests", str);
+    object_class_property_add_bool(oc, "acpi", virt_get_acpi,
+                                   virt_set_acpi);
+    object_class_property_set_description(oc, "acpi",
+                                          "Set on/off to enable/disable "
+                                          "ACPI");
 }
 
 static const TypeInfo virt_machine_typeinfo = {

@@ -92,4 +92,24 @@ typedef struct AcpiFadtData {
 #define ACPI_FADT_ARM_PSCI_COMPLIANT  (1 << 0)
 #define ACPI_FADT_ARM_PSCI_USE_HVC    (1 << 1)
 
+union AcpiImsicHartIndex {
+    struct {
+        uint32_t lhxw:4;
+        uint32_t hhxw:3;
+        uint32_t lhxs:3;
+        uint32_t hhxs:5;
+        uint32_t reserved:17;
+    };
+   uint32_t hart_index;
+};
+typedef union AcpiImsicHartIndex AcpiImsicHartIndex;
+
+union AcpiRedtHartHwCap {
+    struct {
+        uint32_t mmu_type:4;
+        uint32_t reserved:28;
+    };
+    uint32_t hw_cap;
+};
+typedef union AcpiRedtHartHwCap AcpiRedtHartHwCap;
 #endif
