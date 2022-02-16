@@ -1633,13 +1633,14 @@ static int probe_access_internal(CPUArchState *env, target_ulong addr,
     return flags;
 }
 
-int probe_access_flags(CPUArchState *env, target_ulong addr,
-                       MMUAccessType access_type, int mmu_idx,
-                       bool nonfault, void **phost, uintptr_t retaddr)
+int probe_access_range_flags(CPUArchState *env, target_ulong addr,
+                             int size, MMUAccessType access_type,
+                             int mmu_idx, bool nonfault, void **phost,
+                             uintptr_t retaddr)
 {
     int flags;
 
-    flags = probe_access_internal(env, addr, 0, access_type, mmu_idx,
+    flags = probe_access_internal(env, addr, size, access_type, mmu_idx,
                                   nonfault, phost, retaddr);
 
     /* Handle clean RAM pages.  */
@@ -1652,6 +1653,14 @@ int probe_access_flags(CPUArchState *env, target_ulong addr,
     }
 
     return flags;
+}
+
+int probe_access_flags(CPUArchState *env, target_ulong addr,
+                       MMUAccessType access_type, int mmu_idx,
+                       bool nonfault, void **phost, uintptr_t retaddr)
+{
+    return probe_access_range_flags(env, addr, 0, access_type, mmu_idx,
+                                    nonfault, phost, retaddr);
 }
 
 void *probe_access(CPUArchState *env, target_ulong addr, int size,
