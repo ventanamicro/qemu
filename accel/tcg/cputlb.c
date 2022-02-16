@@ -1623,6 +1623,16 @@ int probe_access_flags(CPUArchState *env, target_ulong addr,
                              nonfault, phost, &full, retaddr);
 }
 
+int probe_access_range_flags(CPUArchState *env, target_ulong addr,
+                       int size, MMUAccessType access_type, int mmu_idx,
+                       bool nonfault, void **phost, uintptr_t retaddr)
+{
+    CPUTLBEntryFull *full;
+
+    return probe_access_internal(env, addr, size, access_type, mmu_idx,
+                             nonfault, phost, &full, retaddr);
+}
+
 void *probe_access(CPUArchState *env, target_ulong addr, int size,
                    MMUAccessType access_type, int mmu_idx, uintptr_t retaddr)
 {
