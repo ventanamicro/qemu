@@ -47,6 +47,7 @@
 #include "hw/display/ramfb.h"
 #include "hw/acpi/acpi.h"
 #include "hw/acpi/generic_event_device.h"
+#include "hw/firmware/smbios.h"
 
 /*
  * The virt machine physical address space used by some of the devices
@@ -1194,6 +1195,28 @@ static DeviceState *virt_create_aia(RISCVVirtAIAType aia_type, int aia_guests,
     return aplic_m;
 }
 
+static void virt_build_smbios(RISCVVirtState *vms)
+{
+    MachineClass *mc = MACHINE_GET_CLASS(vms);
+    uint8_t *smbios_tables, *smbios_anchor;
+    size_t smbios_tables_len, smbios_anchor_len;
+    const char *product = "QEMU Virtual Machine";
+
+    smbios_set_defaults("QEMU", product,
+                        mc->name, false,
+                        true, SMBIOS_ENTRY_POINT_TYPE_64);
+
+    smbios_get_tables(MACHINE(vms), NULL, 0, &smbios_tables, &smbios_tables_len,
+                      &smbios_anchor, &smbios_anchor_len, &error_fatal);
+
+    if (smbios_anchor) {
+        fw_cfg_add_file(vms->fw_cfg, "etc/smbios/smbios-tables",
+                        smbios_tables, smbios_tables_len);
+        fw_cfg_add_file(vms->fw_cfg, "etc/smbios/smbios-anchor",
+                        smbios_anchor, smbios_anchor_len);
+    }
+}
+
 static void virt_machine_init(MachineState *machine)
 {
     const MemMapEntry *memmap = virt_memmap;
@@ -1467,6 +1490,7 @@ static void virt_machine_init(MachineState *machine)
     if ((s->aia_type == VIRT_AIA_TYPE_APLIC_IMSIC) &&
             (s->have_acpi == true)) {
         virt_acpi_setup(s);
+        virt_build_smbios(s);
     }
 }
 

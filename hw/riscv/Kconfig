@@ -51,6 +51,7 @@ config RISCV_VIRT
     select FW_CFG_DMA
     select ACPI_PCI
     select ACPI_HW_REDUCED
+    select SMBIOS
 
 config SIFIVE_E
     bool
