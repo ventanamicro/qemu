@@ -296,6 +296,7 @@ struct CPURISCVState {
 
     /* Sstc CSRs */
     uint64_t stimecmp;
+    uint64_t vstimecmp;
 
     /* physical memory protection */
     pmp_table_t pmp_state;
@@ -348,6 +349,8 @@ struct CPURISCVState {
     /* Fields from here on are preserved across CPU reset. */
     QEMUTimer *mtimer; /* Internal timer for M-mode interrupt */
     QEMUTimer *stimer; /* Internal timer for S-mode interrupt */
+    QEMUTimer *vstimer; /* Internal timer for VS-mode interrupt */
+    bool vstime_irq;
 
     hwaddr kernel_addr;
     hwaddr fdt_addr;
