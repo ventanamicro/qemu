@@ -57,6 +57,7 @@ struct RISCVVirtState {
     RISCVVirtAIAType aia_type;
     int aia_guests;
     MemMapEntry *memmap;
+    PCIBus *bus;
 };
 
 enum {
