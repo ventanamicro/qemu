@@ -52,6 +52,18 @@ typedef struct AcpiBuildState {
     bool patched;
 } AcpiBuildState;
 
+static uint32_t
+acpi_num_bits(uint32_t count)
+{
+    uint32_t ret = 0;
+
+    while (BIT(ret) < count) {
+        ret++;
+    }
+
+    return ret;
+}
+
 static void
 acpi_align_size(GArray *blob, unsigned align)
 {
@@ -222,6 +234,99 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
     free_aml_allocator();
 }
 
+/* MADT */
+static void
+build_madt(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
+{
+    MachineState *mc = MACHINE(vms);
+    int socket;
+    uint16_t base_hartid = 0;
+    uint32_t cpu_id = 0;
+    uint64_t imsic_socket_addr, imsic_addr, aplic_addr;
+    uint32_t imsic_size, aplic_size;
+    uint8_t  hart_index_bits, group_index_bits;
+    uint8_t  group_index_shift, guest_index_bits;
+    uint16_t imsic_max_hart_per_socket;
+
+    AcpiTable table = { .sig = "APIC", .rev = 3, .oem_id = vms->oem_id,
+                        .oem_table_id = vms->oem_table_id };
+
+    acpi_table_begin(&table, table_data);
+    /* Local Interrupt Controller Address */
+    build_append_int_noprefix(table_data, 0, 4);
+    build_append_int_noprefix(table_data, 0, 4);   /* MADT Flags */
+
+    imsic_max_hart_per_socket = 0;
+    for (socket = 0; socket < riscv_socket_count(mc); socket++) {
+        if (imsic_max_hart_per_socket < vms->soc[socket].num_harts) {
+            imsic_max_hart_per_socket = vms->soc[socket].num_harts;
+        }
+    }
+
+    hart_index_bits = acpi_num_bits(imsic_max_hart_per_socket);
+    group_index_bits = acpi_num_bits(riscv_socket_count(mc));
+    group_index_shift = IMSIC_MMIO_GROUP_MIN_SHIFT;
+    guest_index_bits = acpi_num_bits(vms->aia_guests + 1);
+
+    /* RISC-V Local INTC structures per HART */
+    for (socket = 0; socket < riscv_socket_count(mc); socket++) {
+        base_hartid = riscv_socket_first_hartid(mc, socket);
+        imsic_socket_addr = vms->memmap[VIRT_IMSIC_S].base + (socket *
+                                               VIRT_IMSIC_GROUP_MAX_SIZE);
+
+        for (int i = 0; i < vms->soc[socket].num_harts; i++) {
+            imsic_addr = imsic_socket_addr + i * IMSIC_HART_SIZE(guest_index_bits);
+            imsic_size = IMSIC_HART_SIZE(guest_index_bits);
+            build_append_int_noprefix(table_data, 0x18, 1);    /* Type         */
+            build_append_int_noprefix(table_data, 32, 1);      /* Length       */
+            build_append_int_noprefix(table_data, 1, 1);       /* Version      */
+            build_append_int_noprefix(table_data, 0, 1);       /* Reserved     */
+            build_append_int_noprefix(table_data, 5, 4);       /* Flags        */
+            build_append_int_noprefix(table_data,
+			              (base_hartid + i), 8);   /* hartid       */
+            build_append_int_noprefix(table_data, cpu_id, 4);  /* ACPI Proc ID */
+            build_append_int_noprefix(table_data, imsic_size, 4);
+            build_append_int_noprefix(table_data, imsic_addr, 8);
+	    cpu_id++;
+        }
+    }
+
+
+    /* S-mode IMSIC_GLOBAL */
+    build_append_int_noprefix(table_data, 0x19, 1);     /* Type */
+    build_append_int_noprefix(table_data, 18, 1);       /* Length */
+    build_append_int_noprefix(table_data, 1, 1);        /* Version */
+    build_append_int_noprefix(table_data, 0, 1);        /* Reserved */
+    build_append_int_noprefix(table_data, 0, 4);        /* Flags */
+    build_append_int_noprefix(table_data, 0, 2);        /* Model 0 - Generic IMSIC */
+    /* Num Interrupt Id */
+    build_append_int_noprefix(table_data, VIRT_IRQCHIP_NUM_MSIS, 2); /* S-level */
+    build_append_int_noprefix(table_data, VIRT_IRQCHIP_NUM_MSIS, 2); /* VS-level */
+    build_append_int_noprefix(table_data, guest_index_bits, 1);
+    build_append_int_noprefix(table_data, hart_index_bits, 1);
+    build_append_int_noprefix(table_data, group_index_bits, 1);
+    build_append_int_noprefix(table_data, group_index_shift, 1);
+
+    /* APLIC */
+    for (socket = 0; socket < riscv_socket_count(mc); socket++) {
+        aplic_addr = vms->memmap[VIRT_APLIC_S].base +
+            vms->memmap[VIRT_APLIC_S].size * socket;
+        aplic_size = vms->memmap[VIRT_APLIC_S].size;
+
+        build_append_int_noprefix(table_data, 0x1A, 1);     /* Type */
+        build_append_int_noprefix(table_data, 20, 1);       /* Length */
+        build_append_int_noprefix(table_data, 1, 1);        /* Version */
+        build_append_int_noprefix(table_data, socket, 1);        /* id */
+        build_append_int_noprefix(table_data, 0, 2);       /*  Model 0: Genric IMSIC */
+        build_append_int_noprefix(table_data, VIRT_IRQCHIP_NUM_SOURCES, 2);
+        build_append_int_noprefix(table_data, aplic_addr, 8);
+        build_append_int_noprefix(table_data, aplic_size, 4);
+        cpu_id += vms->soc[socket].num_harts;
+    }
+
+    acpi_table_end(linker, &table);
+}
+
 static void
 virt_acpi_build(RISCVVirtState *vms, AcpiBuildTables *tables)
 {
@@ -243,6 +348,9 @@ virt_acpi_build(RISCVVirtState *vms, AcpiBuildTables *tables)
     /* FADT and others pointed to by RSDT */
     acpi_add_table(table_offsets, tables_blob);
     build_fadt_rev5(tables_blob, tables->linker, vms, dsdt);
+
+    acpi_add_table(table_offsets, tables_blob);
+    build_madt(tables_blob, tables->linker, vms);
 
     acpi_add_table(table_offsets, tables_blob);
     {
