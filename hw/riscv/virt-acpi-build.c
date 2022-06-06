@@ -181,6 +181,63 @@ acpi_dsdt_add_pci(Aml *scope, const MemMapEntry *memmap,
     acpi_dsdt_add_gpex(scope, &cfg);
 }
 
+static void
+acpi_dsdt_aplic_mat(uint16_t socket, RISCVVirtState *vms,
+                    GArray *entry)
+{
+    uint64_t aplic_addr;
+    uint32_t aplic_size;
+
+    aplic_addr = vms->memmap[VIRT_APLIC_S].base +
+        vms->memmap[VIRT_APLIC_S].size * socket;
+    aplic_size = vms->memmap[VIRT_APLIC_S].size;
+
+    build_append_int_noprefix(entry, 0x1A, 1);     /* Type */
+    build_append_int_noprefix(entry, 20, 1);       /* Length */
+    build_append_int_noprefix(entry, 1, 1);        /* Version */
+    build_append_int_noprefix(entry, socket, 1);   /* id */
+    build_append_int_noprefix(entry, 0, 2);       /* Model 0 :Genric APLIC */
+    build_append_int_noprefix(entry, VIRT_IRQCHIP_NUM_SOURCES, 2);
+    build_append_int_noprefix(entry, aplic_addr, 8);
+    build_append_int_noprefix(entry, aplic_size, 4);
+
+}
+
+static void
+acpi_dsdt_add_aplic(Aml *scope, RISCVVirtState *vms)
+{
+    MachineState *ms = MACHINE(vms);
+    uint16_t i;
+
+    const MemMapEntry *memmap = vms->memmap;
+
+
+    for (i = 0; i < riscv_socket_count(ms); i++) {
+        GArray *mat_buf = g_array_new(0, 1, 1);
+        Aml *dev = aml_device("PLIC");
+        aml_append(dev, aml_name_decl("_HID", aml_string("APLIC001")));
+        aml_append(dev, aml_name_decl("_UID", aml_int(i)));
+        /* device present, functioning, decoding, not shown in UI */
+        aml_append(dev, aml_name_decl("_STA", aml_int(0xB)));
+        aml_append(dev, aml_name_decl("_CCA", aml_int(1)));
+
+
+        /*  _MAT */
+        acpi_dsdt_aplic_mat(i, vms, mat_buf);
+        aml_append(dev, aml_name_decl("_MAT",
+                                      aml_buffer(mat_buf->len,
+                                                 (uint8_t *) mat_buf->data)));
+        g_array_free(mat_buf, true);
+
+        Aml *crs = aml_resource_template();
+        aml_append(crs, aml_memory32_fixed(memmap[VIRT_APLIC_S].base * i,
+                                             memmap[VIRT_APLIC_S].size,
+                                             AML_READ_WRITE));
+        aml_append(dev, aml_name_decl("_CRS", crs));
+        aml_append(scope, dev);
+    }
+}
+
 /* FADT */
 static void
 build_fadt_rev5(GArray *table_data, BIOSLinker *linker,
@@ -220,6 +277,7 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
     acpi_dsdt_add_cpus(scope, vms);
 
     acpi_dsdt_add_fw_cfg(scope, &memmap[VIRT_FW_CFG]);
+    acpi_dsdt_add_aplic(scope, vms);
     acpi_dsdt_add_pci(scope, memmap, PCIE_IRQ, vms);
     acpi_dsdt_add_virtio(scope, &memmap[VIRT_VIRTIO],
                           (VIRTIO_IRQ), VIRTIO_COUNT);
