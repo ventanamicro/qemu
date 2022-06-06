@@ -58,6 +58,8 @@ struct RISCVVirtState {
     int aia_guests;
     MemMapEntry *memmap;
     PCIBus *bus;
+    char *oem_id;
+    char *oem_table_id;
 };
 
 enum {
