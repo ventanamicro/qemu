@@ -40,6 +40,7 @@
 #include "hw/pci-host/gpex.h"
 #include "qapi/error.h"
 #include "migration/vmstate.h"
+#include "hw/intc/riscv_aclint.h"
 
 #define ACPI_BUILD_TABLE_SIZE             0x20000
 
@@ -238,6 +239,73 @@ acpi_dsdt_add_aplic(Aml *scope, RISCVVirtState *vms)
     }
 }
 
+#define RHCT_NODE_ARRAY_OFFSET 56
+static void
+build_rhct(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
+{
+    MachineState *ms = MACHINE(vms);
+    uint32_t acpi_proc_id = 0;
+    int i, socket;
+    RISCVCPU *cpu;
+    char *isa;
+    size_t len, aligned_len;
+    uint32_t isa_offset, cbo_offset, num_rhct_nodes;
+
+    AcpiTable table = { .sig = "RHCT", .rev = 1, .oem_id = vms->oem_id,
+                        .oem_table_id = vms->oem_table_id };
+
+    acpi_table_begin(&table, table_data);
+
+    build_append_int_noprefix(table_data, 0x0, 4);   /* Reserved */
+    build_append_int_noprefix(table_data,
+                              RISCV_ACLINT_DEFAULT_TIMEBASE_FREQ, 8);
+
+    /* ISA, CBO + N hart info */
+    num_rhct_nodes = 2 + ms->smp.cpus;
+    build_append_int_noprefix(table_data, num_rhct_nodes, 4);   /* Number of RHCT nodes */
+    build_append_int_noprefix(table_data, RHCT_NODE_ARRAY_OFFSET, 4); /* Offset to RHCT node array */
+
+    /* ISA string node */
+    isa_offset = table_data->len - table.table_offset;
+    build_append_int_noprefix(table_data, 0, 2);   /* Type */
+
+    cpu = &vms->soc[0].harts[0];
+    isa = riscv_isa_string(cpu);
+    len = 8 + strlen(isa) + 1;
+    aligned_len = (len % 2) ? (len + 1) : len;
+
+    build_append_int_noprefix(table_data, aligned_len, 2);   /* Total length */
+    build_append_int_noprefix(table_data, 0x1, 2);   /* Revision */
+    build_append_int_noprefix(table_data, strlen(isa), 2);   /* ISA length */
+    g_array_append_vals(table_data, isa, strlen(isa) + 1);   /* ISA string */
+    if (aligned_len != len)
+        build_append_int_noprefix(table_data, 0x0, 1);   /* pad */
+
+    /* CBO Node */
+    cbo_offset = table_data->len - table.table_offset;
+    build_append_int_noprefix(table_data, 1, 2);     /* Type */
+    build_append_int_noprefix(table_data, 12, 2);    /* Length */
+    build_append_int_noprefix(table_data, 0x1, 2);   /* Revision */
+    build_append_int_noprefix(table_data, 64, 2);    /* CBOM block size */
+    build_append_int_noprefix(table_data, 64, 2);    /* CBOP block size */
+    build_append_int_noprefix(table_data, 64, 2);    /* CBOZ block size */
+
+    for (socket = 0; socket < riscv_socket_count(ms); socket++) {
+        for (i = 0; i < vms->soc[socket].num_harts; i++) {
+            build_append_int_noprefix(table_data, 255, 2);  /* Type */
+            build_append_int_noprefix(table_data, 20, 2);   /* Length */
+            build_append_int_noprefix(table_data, 0x1, 2);   /* Revision */
+            build_append_int_noprefix(table_data, 2, 2);     /* number of offsets */
+            build_append_int_noprefix(table_data, acpi_proc_id, 4); /* ACPI proc ID */
+            build_append_int_noprefix(table_data, isa_offset, 4);    /* ISA node offset */
+            build_append_int_noprefix(table_data, cbo_offset, 4);    /* CBO node offset */
+	    acpi_proc_id++;
+        }
+    }
+
+    acpi_table_end(linker, &table);
+}
+
 /* FADT */
 static void
 build_fadt_rev5(GArray *table_data, BIOSLinker *linker,
@@ -409,6 +477,9 @@ virt_acpi_build(RISCVVirtState *vms, AcpiBuildTables *tables)
 
     acpi_add_table(table_offsets, tables_blob);
     build_madt(tables_blob, tables->linker, vms);
+
+    acpi_add_table(table_offsets, tables_blob);
+    build_rhct(tables_blob, tables->linker, vms);
 
     acpi_add_table(table_offsets, tables_blob);
     {
