@@ -56,6 +56,7 @@ struct RISCVVirtState {
     bool have_aclint;
     RISCVVirtAIAType aia_type;
     int aia_guests;
+    MemMapEntry *memmap;
 };
 
 enum {
@@ -78,9 +79,13 @@ enum {
     VIRT_PCIE_MMIO,
     VIRT_PCIE_PIO,
     VIRT_PLATFORM_BUS,
-    VIRT_PCIE_ECAM
+    VIRT_PCIE_ECAM,
+    VIRT_LAST_MEMMAP /* Keep this entry always last */
 };
 
+enum {
+	VIRT_HIGH_PCIE_MMIO = VIRT_LAST_MEMMAP,
+};
 enum {
     UART0_IRQ = 10,
     RTC_IRQ = 11,
