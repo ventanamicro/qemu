@@ -53,6 +53,7 @@ config RISCV_VIRT
     select ACPI
     select ACPI_HW_REDUCED
     select ACPI_PCI
+    select SMBIOS
 
 config SIFIVE_E
     bool

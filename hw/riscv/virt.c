@@ -49,6 +49,7 @@
 #include "hw/pci-host/gpex.h"
 #include "hw/display/ramfb.h"
 #include "qapi/qapi-visit-common.h"
+#include "hw/firmware/smbios.h"
 
 static const MemMapEntry virt_memmap[] = {
     [VIRT_DEBUG] =        {        0x0,         0x100 },
@@ -1228,6 +1229,32 @@ static void create_platform_bus(RISCVVirtState *s, DeviceState *irqchip)
                                 sysbus_mmio_get_region(sysbus, 0));
 }
 
+static void virt_build_smbios(RISCVVirtState *vms)
+{
+    MachineClass *mc = MACHINE_GET_CLASS(vms);
+    uint8_t *smbios_tables, *smbios_anchor;
+    size_t smbios_tables_len, smbios_anchor_len;
+    const char *product = "QEMU Virtual Machine";
+
+    if (kvm_enabled()) {
+        product = "KVM Virtual Machine";
+    }
+
+    smbios_set_defaults("QEMU", product,
+                        mc->name, false,
+                        true, SMBIOS_ENTRY_POINT_TYPE_64);
+
+    smbios_get_tables(MACHINE(vms), NULL, 0, &smbios_tables, &smbios_tables_len,
+                      &smbios_anchor, &smbios_anchor_len, &error_fatal);
+
+    if (smbios_anchor) {
+        fw_cfg_add_file(vms->fw_cfg, "etc/smbios/smbios-tables",
+                        smbios_tables, smbios_tables_len);
+        fw_cfg_add_file(vms->fw_cfg, "etc/smbios/smbios-anchor",
+                        smbios_anchor, smbios_anchor_len);
+    }
+}
+
 static void virt_machine_done(Notifier *notifier, void *data)
 {
     RISCVVirtState *s = container_of(notifier, RISCVVirtState,
@@ -1322,8 +1349,10 @@ static void virt_machine_done(Notifier *notifier, void *data)
     }
 
     if ((s->aia_type == VIRT_AIA_TYPE_APLIC_IMSIC) &&
-		    virt_is_acpi_enabled(s))
-	    virt_acpi_setup(s);
+		    virt_is_acpi_enabled(s)) {
+        virt_acpi_setup(s);
+        virt_build_smbios(s);
+    }
 }
 
 static void virt_machine_init(MachineState *machine)
