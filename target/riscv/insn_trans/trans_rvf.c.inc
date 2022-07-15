@@ -24,9 +24,43 @@
             return false; \
 } while (0)
 
-#define REQUIRE_ZFINX_OR_F(ctx) do {\
-    if (!ctx->cfg_ptr->ext_zfinx) { \
-        REQUIRE_EXT(ctx, RVF); \
+#ifndef CONFIG_USER_ONLY
+#define SMSTATEEN_CHECK(ctx) do { \
+    CPUState *cpu = ctx->cs; \
+    CPURISCVState *env = cpu->env_ptr; \
+    if (ctx->cfg_ptr->ext_smstateen && \
+        (env->priv < PRV_M)) { \
+        uint64_t stateen = env->mstateen[0]; \
+        uint64_t hstateen = env->hstateen[0]; \
+        uint64_t sstateen = env->sstateen[0]; \
+        if (!(stateen & SMSTATEEN_STATEEN)) { \
+            hstateen = 0; \
+            sstateen = 0; \
+        } \
+        if (ctx->virt_enabled) { \
+            stateen &= hstateen; \
+            if (!(hstateen & SMSTATEEN_STATEEN)) { \
+                sstateen = 0; \
+            } \
+        } \
+        if (env->priv == PRV_U && has_ext(ctx, RVS)) { \
+            stateen &= sstateen; \
+        } \
+        if (!(stateen & SMSTATEEN0_FCSR)) { \
+            return false; \
+        } \
+    } \
+} while (0)
+#else
+#define SMSTATEEN_CHECK(ctx)
+#endif
+
+#define REQUIRE_ZFINX_OR_F(ctx) do { \
+    if (!has_ext(ctx, RVF)) { \
+        SMSTATEEN_CHECK(ctx); \
+        if (!ctx->cfg_ptr->ext_zfinx) { \
+            return false; \
+        } \
     } \
 } while (0)
 
