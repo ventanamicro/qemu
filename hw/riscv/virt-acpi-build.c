@@ -76,6 +76,53 @@ acpi_align_size(GArray *blob, unsigned align)
 }
 
 static void
+acpi_dsdt_add_pclpi_osc(Aml *scope)
+{
+    Aml *method, *UUID, *if_uuid, *else_uuid;
+    Aml *if_arg1_not_1, *else_arg1_not_1;
+
+    method = aml_method("_OSC", 4, AML_NOTSERIALIZED);
+    /*
+     * CDW1 is used for the return value so is present
+     * whether or not a match occurs
+     */
+    aml_append(method,
+               aml_create_dword_field(aml_arg(3), aml_int(0), "CDW1"));
+    aml_append(method,
+               aml_create_dword_field(aml_arg(3), aml_int(4), "CDW2"));
+
+    UUID = aml_touuid("0811B06E-4A27-44F9-8D60-3CBBC22E7B48");
+    if_uuid = aml_if(aml_equal(aml_arg(0), UUID));
+
+    if_arg1_not_1 = aml_if(aml_lnot(aml_equal(aml_arg(1), aml_int(0x1))));
+    aml_append(if_arg1_not_1,
+               aml_or(aml_name("CDW1"), aml_int(0xA), aml_name("CDW1")));
+
+    aml_append(if_uuid, if_arg1_not_1);
+    else_arg1_not_1 = aml_else();
+    aml_append(else_arg1_not_1,
+               aml_and(aml_name("CDW2"), aml_int(0x80), aml_name("CDW2")));
+    aml_append(if_uuid, else_arg1_not_1);
+    aml_append(if_uuid, aml_return(aml_arg(3)));
+    aml_append(method, if_uuid);
+
+    /*
+     * If no UUID matched, return Unrecognized UUID via Arg3 DWord 1
+     * ACPI 6.4 - 6.2.11
+     * _OSC failure - BIT(1)
+     * Unrecognised UUID - BIT(2)
+     */
+    else_uuid = aml_else();
+
+    aml_append(else_uuid,
+               aml_or(aml_name("CDW1"), aml_int(0x6), aml_name("CDW1")));
+    aml_append(else_uuid, aml_return(aml_arg(3)));
+    aml_append(method, else_uuid);
+
+    aml_append(scope, method);
+}
+
+static void
 acpi_dsdt_add_cpus(Aml *scope, RISCVVirtState *vms)
 {
     MachineState *ms = MACHINE(vms);
@@ -360,6 +407,7 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
      * the RTC ACPI device at all when using UEFI.
      */
     scope = aml_scope("\\_SB");
+    acpi_dsdt_add_pclpi_osc(scope);
     acpi_dsdt_add_cpus(scope, vms);
 
     acpi_dsdt_add_fw_cfg(scope, &memmap[VIRT_FW_CFG]);
