@@ -1524,6 +1524,9 @@ static void virt_machine_init(MachineState *machine)
     }
     virt_flash_map(s, system_memory);
 
+    s->oem_id = g_strndup("BOCHS", 6); /*ACPI_BUILD_APPNAME6 */
+    s->oem_table_id = g_strndup("BXPC", 8); /*ACPI_BUILD_APPNAME8 */
+
     /* create device tree */
     create_fdt(s, memmap, machine->ram_size, machine->kernel_cmdline,
                riscv_is_32bit(&s->soc[0]));
