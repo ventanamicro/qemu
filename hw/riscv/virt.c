@@ -247,6 +247,12 @@ static void create_fdt_socket_cpus(RISCVVirtState *s, int socket,
         name = riscv_isa_string(&s->soc[socket].harts[cpu]);
         qemu_fdt_setprop_string(mc->fdt, cpu_name, "riscv,isa", name);
         g_free(name);
+
+        if (s->soc[socket].harts[cpu].cfg.ext_icbom) {
+            qemu_fdt_setprop_cell(mc->fdt, cpu_name, "riscv,cbom-block-size",
+            s->soc[socket].harts[cpu].cfg.cbom_blocksize);
+        }
+
         qemu_fdt_setprop_string(mc->fdt, cpu_name, "compatible", "riscv");
         qemu_fdt_setprop_string(mc->fdt, cpu_name, "status", "okay");
         qemu_fdt_setprop_cell(mc->fdt, cpu_name, "reg",
