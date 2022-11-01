@@ -106,6 +106,82 @@ acpi_dsdt_add_fw_cfg(Aml *scope, const MemMapEntry *fw_cfg_memmap)
     aml_append(scope, dev);
 }
 
+static void
+acpi_dsdt_add_uart(Aml *scope, const MemMapEntry *uart_memmap,
+                    uint32_t uart_irq)
+{
+    Aml *dev = aml_device("COM0");
+    aml_append(dev, aml_name_decl("_HID", aml_string("PNP0501")));
+    aml_append(dev, aml_name_decl("_UID", aml_int(0)));
+
+    Aml *crs = aml_resource_template();
+    aml_append(crs, aml_memory32_fixed(uart_memmap->base,
+                                         uart_memmap->size, AML_READ_WRITE));
+    aml_append(crs,
+                aml_interrupt(AML_CONSUMER, AML_LEVEL, AML_ACTIVE_HIGH,
+                               AML_EXCLUSIVE, &uart_irq, 1));
+    aml_append(dev, aml_name_decl("_CRS", crs));
+
+    Aml *pkg = aml_package(2);
+    aml_append(pkg, aml_string("clock-frequency"));
+    aml_append(pkg, aml_int(3686400));
+
+    Aml *UUID = aml_touuid("DAFFD814-6EBA-4D8C-8A91-BC9BBF4AA301");
+
+    Aml *pkg1 = aml_package(1);
+    aml_append(pkg1, pkg);
+
+    Aml *package = aml_package(2);
+    aml_append(package, UUID);
+    aml_append(package, pkg1);
+
+    aml_append(dev, aml_name_decl("_DSD", package));
+    aml_append(scope, dev);
+}
+
+static void
+acpi_dsdt_add_virtio(Aml *scope,
+                      const MemMapEntry *virtio_mmio_memmap,
+                      uint32_t mmio_irq, int num)
+{
+    hwaddr base = virtio_mmio_memmap->base;
+    hwaddr size = virtio_mmio_memmap->size;
+    int i;
+
+    for (i = 0; i < num; i++) {
+        uint32_t irq = mmio_irq + i;
+        Aml *dev = aml_device("VR%02u", i);
+        aml_append(dev, aml_name_decl("_HID", aml_string("LNRO0005")));
+        aml_append(dev, aml_name_decl("_UID", aml_int(i)));
+        aml_append(dev, aml_name_decl("_CCA", aml_int(1)));
+
+        Aml *crs = aml_resource_template();
+        aml_append(crs, aml_memory32_fixed(base, size, AML_READ_WRITE));
+        aml_append(crs,
+                    aml_interrupt(AML_CONSUMER, AML_LEVEL, AML_ACTIVE_HIGH,
+                                   AML_EXCLUSIVE, &irq, 1));
+        aml_append(dev, aml_name_decl("_CRS", crs));
+        aml_append(scope, dev);
+        base += size;
+    }
+}
+
+static void
+acpi_dsdt_add_pci(Aml *scope, const MemMapEntry *memmap,
+                   uint32_t irq, RISCVVirtState *vms)
+{
+    struct GPEXConfig cfg = {
+        .mmio32 = memmap[VIRT_PCIE_MMIO],
+        .mmio64 = memmap[VIRT_HIGH_PCIE_MMIO],
+        .pio = memmap[VIRT_PCIE_PIO],
+        .ecam = memmap[VIRT_PCIE_ECAM],
+        .irq = irq,
+        .bus = vms->bus,
+    };
+
+    acpi_dsdt_add_gpex(scope, &cfg);
+}
+
 #define RHCT_NODE_ARRAY_OFFSET 56
 static void
 build_rhct(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
@@ -194,6 +270,8 @@ static void
 build_dsdt(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
 {
     Aml *scope, *dsdt;
+    MachineState *ms = MACHINE(vms);
+    uint8_t socket_count;
     const MemMapEntry *memmap = vms->memmap;
     AcpiTable table = { .sig = "DSDT", .rev = 2, .oem_id = vms->oem_id,
                         .oem_table_id = vms->oem_table_id };
@@ -212,6 +290,24 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
     acpi_dsdt_add_cpus(scope, vms);
 
     acpi_dsdt_add_fw_cfg(scope, &memmap[VIRT_FW_CFG]);
+
+    socket_count = riscv_socket_count(ms);
+
+    acpi_dsdt_add_uart(scope, &memmap[VIRT_UART0], (UART0_IRQ));
+
+    if (socket_count == 1) {
+        acpi_dsdt_add_virtio(scope, &memmap[VIRT_VIRTIO],
+                             (VIRTIO_IRQ), VIRTIO_COUNT);
+        acpi_dsdt_add_pci(scope, memmap, PCIE_IRQ, vms);
+    } else if (socket_count == 2) {
+        acpi_dsdt_add_virtio(scope, &memmap[VIRT_VIRTIO],
+                             (VIRTIO_IRQ + VIRT_IRQCHIP_NUM_SOURCES), VIRTIO_COUNT);
+        acpi_dsdt_add_pci(scope, memmap, PCIE_IRQ + VIRT_IRQCHIP_NUM_SOURCES, vms);
+    } else {
+        acpi_dsdt_add_virtio(scope, &memmap[VIRT_VIRTIO],
+                             (VIRTIO_IRQ + VIRT_IRQCHIP_NUM_SOURCES), VIRTIO_COUNT);
+        acpi_dsdt_add_pci(scope, memmap, PCIE_IRQ + VIRT_IRQCHIP_NUM_SOURCES * 2, vms);
+    }
 
     aml_append(dsdt, scope);
 
