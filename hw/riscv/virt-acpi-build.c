@@ -116,7 +116,7 @@ build_rhct(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
     RISCVCPU *cpu;
     char *isa;
     size_t len, aligned_len;
-    uint32_t isa_offset, num_rhct_nodes;
+    uint32_t isa_offset, num_rhct_nodes, cmo_offset;
 
     AcpiTable table = { .sig = "RHCT", .rev = 1, .oem_id = vms->oem_id,
                         .oem_table_id = vms->oem_table_id };
@@ -128,7 +128,7 @@ build_rhct(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
                               RISCV_ACLINT_DEFAULT_TIMEBASE_FREQ, 8);
 
     /* ISA + N hart info */
-    num_rhct_nodes = 1 + ms->smp.cpus;
+    num_rhct_nodes = 2 + ms->smp.cpus;
     build_append_int_noprefix(table_data, num_rhct_nodes, 4);   /* Number of RHCT nodes */
     build_append_int_noprefix(table_data, RHCT_NODE_ARRAY_OFFSET, 4); /* Offset to RHCT node array */
 
@@ -148,14 +148,24 @@ build_rhct(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
     if (aligned_len != len)
         build_append_int_noprefix(table_data, 0x0, 1);   /* pad */
 
+    /* CMO node */
+    cmo_offset = table_data->len - table.table_offset;
+    build_append_int_noprefix(table_data, 1, 2);    /* Type */
+    build_append_int_noprefix(table_data, 12, 2);    /* Total length */
+    build_append_int_noprefix(table_data, 0x1, 2);   /* Revision */
+    build_append_int_noprefix(table_data, 64, 2);    /* CBOM Block Size */
+    build_append_int_noprefix(table_data, 64, 2);    /* CBOP Block Size */
+    build_append_int_noprefix(table_data, 64, 2);    /* CBOZ Block Size */
+
     for (socket = 0; socket < riscv_socket_count(ms); socket++) {
         for (i = 0; i < vms->soc[socket].num_harts; i++) {
             build_append_int_noprefix(table_data, 0xFFFF, 2);  /* Type */
-            build_append_int_noprefix(table_data, 16, 2);   /* Length */
+            build_append_int_noprefix(table_data, 20, 2);   /* Length */
             build_append_int_noprefix(table_data, 0x1, 2);   /* Revision */
             build_append_int_noprefix(table_data, 2, 2);     /* number of offsets */
             build_append_int_noprefix(table_data, acpi_proc_id, 4); /* ACPI proc ID */
             build_append_int_noprefix(table_data, isa_offset, 4);    /* ISA node offset */
+            build_append_int_noprefix(table_data, cmo_offset, 4);    /* CMO node offset */
 	    acpi_proc_id++;
         }
     }
