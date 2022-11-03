@@ -220,8 +220,8 @@ build_madt(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
     int socket;
     uint16_t base_hartid = 0;
     uint32_t cpu_id = 0;
-    uint64_t imsic_socket_addr, imsic_addr;
-    uint32_t imsic_size;
+    uint64_t imsic_socket_addr, imsic_addr, aplic_addr;
+    uint32_t imsic_size, gsi_base;
     uint8_t  hart_index_bits, group_index_bits;
     uint8_t  group_index_shift, guest_index_bits;
     uint16_t imsic_max_hart_per_socket;
@@ -300,6 +300,29 @@ build_madt(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
         build_append_int_noprefix(table_data, hart_index_bits, 1);
         build_append_int_noprefix(table_data, group_index_bits, 1);
         build_append_int_noprefix(table_data, group_index_shift, 1);
+    }
+
+    if (vms->aia_type != VIRT_AIA_TYPE_NONE) {
+        /* APLICs */
+        for (socket = 0; socket < riscv_socket_count(mc); socket++) {
+            aplic_addr = vms->memmap[VIRT_APLIC_S].base + vms->memmap[VIRT_APLIC_S].size * socket;
+            gsi_base = VIRT_IRQCHIP_NUM_SOURCES * socket;
+            build_append_int_noprefix(table_data, 0x1A, 1);     /* Type */
+            build_append_int_noprefix(table_data, 38, 1);       /* Length */
+            build_append_int_noprefix(table_data, 1, 1);        /* Version */
+            build_append_int_noprefix(table_data, 0, 1);        /* Reserved */
+            build_append_int_noprefix(table_data, socket, 4);   /* APLIC ID */
+            build_append_int_noprefix(table_data, 0, 8);        /* MFG ID */
+            if (vms->aia_type == VIRT_AIA_TYPE_APLIC) {
+                build_append_int_noprefix(table_data, vms->soc[socket].num_harts, 4);        /* nr_idcs */
+            } else {
+                build_append_int_noprefix(table_data, 0, 4);        /* nr_idcs */
+            }
+            build_append_int_noprefix(table_data, gsi_base, 4);        /* GSI Base */
+            build_append_int_noprefix(table_data, aplic_addr, 8);        /* MMIO base */
+            build_append_int_noprefix(table_data, vms->memmap[VIRT_APLIC_S].size, 4); /* MMIO size */
+            build_append_int_noprefix(table_data, VIRT_IRQCHIP_NUM_SOURCES, 2);        /* nr_irqs */
+        }
     }
 
     acpi_table_end(linker, &table);
