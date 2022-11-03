@@ -287,6 +287,19 @@ build_madt(GArray *table_data, BIOSLinker *linker, RISCVVirtState *vms)
                 cpu_id++;
             }
         }
+
+        /* IMSIC */
+        build_append_int_noprefix(table_data, 0x19, 1);     /* Type */
+        build_append_int_noprefix(table_data, 16, 1);       /* Length */
+        build_append_int_noprefix(table_data, 1, 1);        /* Version */
+        build_append_int_noprefix(table_data, 0, 1);        /* Reserved */
+        build_append_int_noprefix(table_data, 0, 4);        /* Flags */
+        build_append_int_noprefix(table_data, VIRT_IRQCHIP_NUM_MSIS, 2); /* S-level */
+        build_append_int_noprefix(table_data, VIRT_IRQCHIP_NUM_MSIS, 2); /* VS-level */
+        build_append_int_noprefix(table_data, guest_index_bits, 1);
+        build_append_int_noprefix(table_data, hart_index_bits, 1);
+        build_append_int_noprefix(table_data, group_index_bits, 1);
+        build_append_int_noprefix(table_data, group_index_shift, 1);
     }
 
     acpi_table_end(linker, &table);
