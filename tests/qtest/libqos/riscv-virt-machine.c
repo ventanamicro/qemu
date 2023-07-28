@@ -37,7 +37,7 @@
  * VIRT_VIRTIO. BASE_ADDR  points to the last
  * virtio_mmio device.
  */
-#define VIRTIO_MMIO_BASE_ADDR      0x10008000
+#define VIRTIO_MMIO_BASE_ADDR      0x1001E000
 #define VIRTIO_MMIO_SIZE           0x00001000
 
 /* VIRT_PCIE_PIO  */

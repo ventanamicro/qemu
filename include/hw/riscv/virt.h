@@ -55,6 +55,7 @@ struct RISCVVirtState {
 
     int fdt_size;
     bool have_aclint;
+    bool have_rpmi;
     RISCVVirtAIAType aia_type;
     int aia_guests;
     char *oem_id;
@@ -75,6 +76,9 @@ enum {
     VIRT_APLIC_M,
     VIRT_APLIC_S,
     VIRT_UART0,
+    VIRT_RPMI_SHMEM,
+    VIRT_RPMI_DOORBELL,
+    VIRT_RPMI_FCM,
     VIRT_VIRTIO,
     VIRT_FW_CFG,
     VIRT_IMSIC_M,
