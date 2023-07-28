@@ -60,6 +60,7 @@ config RISCV_VIRT
     select RISCV_APLIC
     select RISCV_IOMMU
     select RISCV_IMSIC
+    select RISCV_RPMI
     select SIFIVE_PLIC
     select SIFIVE_TEST
     select SMBIOS
