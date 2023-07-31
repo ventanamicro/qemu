@@ -150,6 +150,7 @@ int handle_rpmi_grp_base(struct rpmi_message *msg, int xport_id);
 int handle_rpmi_grp_cppc(struct rpmi_message *msg, int xport_id);
 int handle_rpmi_grp_hsm(struct rpmi_message *msg, int xport_id);
 bool execute_rpmi_hsm_stop(void *env);
+int handle_rpmi_grp_sys_reset(struct rpmi_message *msg, int xport_id);
 
 #endif
 
