@@ -21,19 +21,62 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "qemu/log.h"
+#include "qemu/timer.h"
 #include "hw/misc/riscv_rpmi.h"
 #include "exec/address-spaces.h"
 #include "hw/qdev-properties.h"
+#include "hw/misc/riscv_rpmi.h"
+#include "hw/misc/riscv_rpmi_transport.h"
+
+static int num_xports;
 
 static uint64_t riscv_rpmi_read(void *opaque, hwaddr offset, unsigned int size)
 {
-    return 0;
+    struct RiscvRpmiState *s = opaque;
+    if ((size != 4) || (offset != 0)) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "riscv_rpmi_read: Invalid read access to "
+                      "addr %" HWADDR_PRIx ", size: %x\n",
+                      offset, size);
+        return 0;
+
+    } else {
+        return s->doorbell;
+    }
 }
 
 static void riscv_rpmi_write(void *opaque, hwaddr offset,
                 uint64_t val64, unsigned int size)
 {
-    return;
+    struct RiscvRpmiState *s = opaque;
+    if ((size != 4) || (offset != 0)) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "riscv_rpmi_write: Invalid write access to "
+                      "addr %" HWADDR_PRIx ", size: %x\n",
+                      offset, size);
+        return;
+    }
+
+    s->doorbell = val64;
+    if (val64 == 1) {
+        handle_rpmi_shm(s->id);
+
+        /* clear the doorbell register */
+        s->doorbell = 0;
+    }
+}
+
+void fcm_checkpoint_notify(void *opaque)
+{
+    struct RiscvRpmiState *s = opaque;
+    uint32_t xport;
+
+    for (xport = 0; xport < num_xports; xport++) {
+        handle_rpmi_fcm(xport);
+    }
+
+    timer_mod(s->fcm_poll_timer,
+              qemu_clock_get_us(QEMU_CLOCK_HOST) + FCM_CHECK_TIME);
 }
 
 static const MemoryRegionOps riscv_rpmi_ops = {
@@ -56,10 +99,15 @@ static const MemoryRegionOps riscv_rpmi_ops = {
  {
      RiscvRpmiState *rpmi = RISCV_RISCV_RPMI(dev);
 
+     rpmi->id = num_xports;
+
      memory_region_init_io(&rpmi->mmio, OBJECT(dev), &riscv_rpmi_ops, rpmi,
                            TYPE_RISCV_RPMI, RPMI_DBREG_SIZE);
      sysbus_init_mmio(SYS_BUS_DEVICE(dev), &rpmi->mmio);
-
+     rpmi->fcm_poll_timer =  timer_new_us(QEMU_CLOCK_HOST,
+                                       fcm_checkpoint_notify, rpmi);
+     timer_mod(rpmi->fcm_poll_timer,
+               qemu_clock_get_us(QEMU_CLOCK_HOST) + FCM_CHECK_TIME);
  }
 
 static void riscv_rpmi_class_init(ObjectClass *klass, void *data)
@@ -88,6 +136,7 @@ static const TypeInfo riscv_rpmi_info = {
      MemoryRegion *address_space_mem = get_system_memory();
      MemoryRegion *shm_mr = g_new0(MemoryRegion, 1);
      MemoryRegion *fcm_mr = g_new0(MemoryRegion, 1);
+     uint32_t socket_num;
      char name[32];
 
      assert(!(db_addr & 0x3));
@@ -100,7 +149,7 @@ static const TypeInfo riscv_rpmi_info = {
      sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, db_addr);
 
      sprintf(name, "shm@%lx", shm_addr);
-     memory_region_init_ram(fcm_mr, OBJECT(dev), name,
+     memory_region_init_ram(shm_mr, OBJECT(dev), name,
                             shm_sz, &error_fatal);
      memory_region_add_subregion(address_space_mem,
                                  shm_addr, shm_mr);
@@ -110,6 +159,18 @@ static const TypeInfo riscv_rpmi_info = {
                             fcm_sz, &error_fatal);
      memory_region_add_subregion(address_space_mem,
                                  fcm_addr, fcm_mr);
+
+     if (flags & (1 << RPMI_XPORT_TYPE_SOC)) {
+         /* first transport is for SOC and doesnt have any harts */
+         socket_num = -1;
+     } else {
+         socket_num = num_xports - 1;
+     }
+
+     rpmi_init_transport(num_xports, shm_addr, db_addr, fcm_addr, socket_num,
+                         harts_mask);
+
+     num_xports++;
 
      return dev;
  }
