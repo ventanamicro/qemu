@@ -339,6 +339,9 @@ int handle_rpmi_msg(struct rpmi_message *msg, int xport_id)
         break;
 
     case RPMI_SRVGRP_SYSTEM_SUSPEND:
+        handle_rpmi_grp_suspend(msg, xport_id);
+        break;
+
     default:
         qemu_log_mask(LOG_GUEST_ERROR, "%s: Unhandled service group id: %x\n",
                 __func__, svc_grp_id);
