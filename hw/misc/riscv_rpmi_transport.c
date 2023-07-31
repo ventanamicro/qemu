@@ -331,6 +331,9 @@ int handle_rpmi_msg(struct rpmi_message *msg, int xport_id)
         break;
 
     case RPMI_SRVGRP_HSM:
+        handle_rpmi_grp_hsm(msg, xport_id);
+        break;
+
     case RPMI_SRVGRP_SYSTEM_RESET:
     case RPMI_SRVGRP_SYSTEM_SUSPEND:
     default:

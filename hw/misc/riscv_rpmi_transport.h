@@ -148,6 +148,8 @@ int smq_dequeue(unsigned int xport_id, unsigned int queue_id, void *data);
 
 int handle_rpmi_grp_base(struct rpmi_message *msg, int xport_id);
 int handle_rpmi_grp_cppc(struct rpmi_message *msg, int xport_id);
+int handle_rpmi_grp_hsm(struct rpmi_message *msg, int xport_id);
+bool execute_rpmi_hsm_stop(void *env);
 
 #endif
 
