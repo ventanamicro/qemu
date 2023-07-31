@@ -78,13 +78,8 @@
   * so keeping the poll time to 1ms
   */
 #define FCM_CHECK_TIME 1000
-#define RPMI_PER_HART_FCM_SIZE (4 * 4)
+#define RPMI_PER_HART_FCM_SIZE (4 * 16)
 #define RPMI_FCM_SIZE (MAX_HARTS * RPMI_PER_HART_FCM_SIZE)
-/*
- * out of 0x3000, reserverd SRAM for RPMI handlers,
- * last 0x1000 bytes are for FCM
- */
-
 
 enum rpmi_queue_type {
     RPMI_QUEUE_TYPE_REQ = 0,
@@ -152,6 +147,7 @@ int smq_enqueue(unsigned int xport_id, unsigned int queue_id, void *data);
 int smq_dequeue(unsigned int xport_id, unsigned int queue_id, void *data);
 
 int handle_rpmi_grp_base(struct rpmi_message *msg, int xport_id);
+int handle_rpmi_grp_cppc(struct rpmi_message *msg, int xport_id);
 
 #endif
 
