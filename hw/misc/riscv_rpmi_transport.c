@@ -323,6 +323,9 @@ int handle_rpmi_msg(struct rpmi_message *msg, int xport_id)
 
     switch (svc_grp_id) {
     case RPMI_SRVGRP_BASE:
+        handle_rpmi_grp_base(msg, xport_id);
+        break;
+
     case RPMI_SRVGRP_CPPC:
     case RPMI_SRVGRP_HSM:
     case RPMI_SRVGRP_SYSTEM_RESET:

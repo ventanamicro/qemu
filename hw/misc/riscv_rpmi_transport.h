@@ -151,5 +151,7 @@ void dump_rpmi_msg(unsigned int xport_id, struct rpmi_message *msg);
 int smq_enqueue(unsigned int xport_id, unsigned int queue_id, void *data);
 int smq_dequeue(unsigned int xport_id, unsigned int queue_id, void *data);
 
+int handle_rpmi_grp_base(struct rpmi_message *msg, int xport_id);
+
 #endif
 
