@@ -67,7 +67,7 @@ struct RiscvRpmiState {
 
 DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
                                hwaddr fcm_addr, int fcm_sz,
-                               uint64_t harts_mask, uint32_t flags);
+                               uint64_t harts_mask, uint32_t flags, void *clock_data);
 void fcm_checkpoint_notify(void *opaque);
 
 #endif

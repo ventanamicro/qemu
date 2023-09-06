@@ -183,6 +183,7 @@ enum rpmi_servicegroup_id {
         RPMI_SRVGRP_SYSTEM_SUSPEND = 0x00003,
         RPMI_SRVGRP_HSM = 0x00004,
         RPMI_SRVGRP_CPPC = 0x00005,
+        RPMI_SRVGRP_CLOCK = 0x00007,
         RPMI_SRVGRP_ID_MAX_COUNT,
 };
 
@@ -473,6 +474,17 @@ struct rpmi_cppc_hart_list_resp {
         u32 hartid[(RPMI_MSG_DATA_SIZE - (sizeof(u32) * 3)) / sizeof(u32)];
 };
 
+enum rpmi_clock_service_id {
+    RPMI_CLK_SRV_ENABLE_NOTIFICATION = 0x01,
+    RPMI_CLK_SRV_GET_SYSTEM_CLOCKS = 0x02,
+    RPMI_CLK_SRV_GET_ATTRIBUTES = 0x03,
+    RPMI_CLK_SRV_GET_SUPPORTED_RATES = 0x04,
+    RPMI_CLK_SRV_SET_CONFIG = 0x05,
+    RPMI_CLK_SRV_GET_CONFIG = 0x06,
+    RPMI_CLK_SRV_SET_RATE = 0x07,
+    RPMI_CLK_SRV_GET_RATE = 0x08,
+    RPMI_CLK_SRV_ID_MAX_COUNT,
+};
 
 #define SET_TOKEN(msg, seq)         \
 ({                      \

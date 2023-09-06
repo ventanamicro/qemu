@@ -76,6 +76,7 @@ struct rpmi_xport_ctx {
     uint64_t harts_mask;
     uint64_t service_grp_mask;
     uint32_t queue_count;
+    void *clock_data;
     struct smq_queue_ctx queue_ctx_table[RPMI_QUEUE_IDX_MAX_COUNT];
     struct smq_queue queue_buf[RPMI_NUM_QUEUES];
 };
@@ -102,8 +103,15 @@ uint64_t rpmi_get_harts_mask(int xport_id)
     return xport_ctx->harts_mask;
 }
 
+void *rpmi_get_clock_data(int xport_id)
+{
+    struct rpmi_xport_ctx *xport_ctx = &rpmi_xports[xport_id];
+    return xport_ctx->clock_data;
+}
+
 void rpmi_init_transport(int xport_id, hwaddr shm_addr, hwaddr reg_addr,
-                         hwaddr fcm_addr, int socket_num, uint64_t harts_mask)
+                         hwaddr fcm_addr, int socket_num, uint64_t harts_mask,
+                         void *clock_data)
 {
     struct rpmi_xport_ctx *xport_ctx = &rpmi_xports[xport_id];
     int q;
@@ -112,6 +120,7 @@ void rpmi_init_transport(int xport_id, hwaddr shm_addr, hwaddr reg_addr,
     xport_ctx->shm_base = shm_addr;
     xport_ctx->regs_base = reg_addr;
     xport_ctx->fcm_base = fcm_addr;
+    xport_ctx->clock_data = clock_data;
     xport_ctx->queue_count = RPMI_NUM_QUEUES;
 
     for (q = 0; q < RPMI_NUM_QUEUES; q++) {
@@ -128,6 +137,8 @@ void rpmi_init_transport(int xport_id, hwaddr shm_addr, hwaddr reg_addr,
         /* initialize SOC transport */
         xport_ctx->service_grp_mask |= ((1 << RPMI_SRVGRP_SYSTEM_RESET) |
                                         (1 << RPMI_SRVGRP_SYSTEM_SUSPEND));
+        if (clock_data)
+            xport_ctx->service_grp_mask |= (1 << RPMI_SRVGRP_CLOCK);
     }
     if (harts_mask) {
         /* initialize socket transport */
@@ -342,6 +353,9 @@ int handle_rpmi_msg(struct rpmi_message *msg, int xport_id)
         handle_rpmi_grp_suspend(msg, xport_id);
         break;
 
+    case RPMI_SRVGRP_CLOCK:
+        handle_rpmi_grp_clock(msg, xport_id);
+        break;
     default:
         qemu_log_mask(LOG_GUEST_ERROR, "%s: Unhandled service group id: %x\n",
                 __func__, svc_grp_id);

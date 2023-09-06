@@ -57,6 +57,7 @@
 #include "hw/virtio/virtio-iommu.h"
 #include "hw/misc/riscv_rpmi.h"
 #include "hw/misc/riscv_rpmi_transport.h"
+#include "hw/misc/rpmi_clock.h"
 
 /* KVM AIA only supports APLIC MSI. APLIC Wired is always emulated by QEMU. */
 static bool virt_use_kvm_aia(RISCVVirtState *s)
@@ -105,6 +106,76 @@ static const MemMapEntry virt_memmap[] = {
 static MemMapEntry virt_high_pcie_memmap;
 
 #define VIRT_FLASH_SECTOR_SIZE (256 * KiB)
+
+struct rpmi_clk_rate uart_clk_data[] = {
+    /* rate 1 */
+    [0] = {.lo = 0x11335577, .hi = 0x22446688},
+    /* rate 2 */
+    [1] = {.lo = 0xdeadbeef, .hi = 0xfeeddead},
+    /* rate 3 */
+    [2] = {.lo = 0x12345678, .hi = 0xaabbccdd},
+    /* rate 4 */
+    [3] = {.lo = 0x11111111, .hi = 0xaaaaaaaa},
+};
+
+struct rpmi_clk_rate pll_clk_data[] = {
+    /* rate 1 */
+    [0] = {.lo = 0x56565656, .hi = 0xbcbcbcbc },
+    /* rate 2 */
+    [1] = {.lo = 0xdeadbeef, .hi = 0xfeeddead},
+    /* rate 3 */
+    [2] = {.lo = 0x12345678, .hi = 0xaabbccdd},
+    /* rate 4 */
+    [3] = {.lo = 0x11111111, .hi = 0xaaaaaaaa},
+    /* rate 5 */
+    [4] = {.lo = 0x45454545, .hi = 0xabababab},
+    /* rate 6 */
+    [5] = {.lo = 0x11335577, .hi = 0x22446688},
+};
+
+struct rpmi_clk_rate gpu_clk_data[] = {
+    /* min */
+    [0] = {.lo = 0x11111111, .hi = 0x22222222},
+    /* max */
+    [1] = {.lo = 0xaaaaaaaa, .hi = 0xbbbbbbbb},
+    /* step */
+    [2] = {.lo = 0x11111111, .hi = 0x11111111},
+};
+
+struct rpmi_clk rpmi_clk[]= {
+    [0] =
+        {
+            .num_rates = 4,
+            .type = RPMI_CLK_TYPE_DISCRETE,
+            .transition_latency_ms = 100,
+            .state = RPMI_CLK_STATE_ENABLED,
+            .current_rate = 0xfeeddeaddeadbeef,
+            .name = "uartclk",
+            .clk_data = uart_clk_data,
+        },
+    [1] =
+        {
+            .num_rates = 6,
+            .type = RPMI_CLK_TYPE_DISCRETE,
+            .transition_latency_ms = 200,
+            .state = RPMI_CLK_STATE_ENABLED,
+            .current_rate = 0xaaaaaaaa11111111,
+            .name = "pllclk",
+            .clk_data = pll_clk_data,
+        },
+
+    [2] =
+        {
+            .num_rates = 3,
+            .type = RPMI_CLK_TYPE_LINEAR,
+            .transition_latency_ms = 300,
+            .state = RPMI_CLK_STATE_ENABLED,
+            .current_rate = 0x2222222211111111,
+            .name = "gpuclk",
+            .clk_data = gpu_clk_data,
+        },
+    [3] = { },
+};
 
 static PFlashCFI01 *virt_flash_create1(RISCVVirtState *s,
                                        const char *name,
@@ -1072,6 +1143,40 @@ static void create_fdt_rpmi_sysreset(RISCVVirtState *s, uint64_t shmem_base,
     g_free(name);
 }
 
+static void create_fdt_sbi_rpxy_clk(RISCVVirtState *s, uint32_t *phandle,
+                               uint32_t rpmi_mbox_handle)
+{
+    char *name;
+    uint32_t clk_phandle;
+    MachineState *mc = MACHINE(s);
+
+    clk_phandle = (*phandle)++;
+    name = g_strdup_printf("/soc/sbi-rpxy-clk");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,sbi-rpxy-clock");
+    qemu_fdt_setprop_cell(mc->fdt, name, "#clock-cells", 1);
+    qemu_fdt_setprop_cell(mc->fdt,  name, "riscv,sbi-rpxy-transport-id", rpmi_mbox_handle);
+    qemu_fdt_setprop_cells(mc->fdt, name, "phandle", clk_phandle);
+    g_free(name);
+}
+
+static void create_fdt_rpmi_clock(RISCVVirtState *s, uint64_t shmem_base,
+                                  uint32_t rpmi_mbox_handle)
+{
+    char *name;
+    uint32_t clock_servicegrp =  7;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/mailbox@%lx/clock@%lx",
+                           (long)shmem_base,
+                           (long)clock_servicegrp);
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible",
+                            "riscv,rpmi-clock");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
+            rpmi_mbox_handle, clock_servicegrp);
+    g_free(name);
+}
 static void create_fdt_rpmi_suspend(RISCVVirtState *s, uint64_t shmem_base,
                                     uint32_t rpmi_mbox_handle)
 {
@@ -1136,6 +1241,8 @@ static void create_fdt_rpmi_nodes(RISCVVirtState *s, int xport_id,
         /* SOC transport will have only reset and suspend*/
         create_fdt_rpmi_sysreset(s, shmem_base, rpmi_mbox_handle);
         create_fdt_rpmi_suspend(s, shmem_base, rpmi_mbox_handle);
+        create_fdt_rpmi_clock(s, shmem_base, rpmi_mbox_handle);
+        create_fdt_sbi_rpxy_clk(s, phandle, rpmi_mbox_handle);
     } else {
         /* Socket transport will have rest of the no system service groups */
         create_fdt_rpmi_hsm(s, shmem_base, rpmi_mbox_handle);
@@ -1205,7 +1312,7 @@ static void finalize_fdt(RISCVVirtState *s)
             riscv_rpmi_create(db_base + (db_sz * i),
                               shm_base + (shm_sz * i), shm_sz,
                               fcm_base + (fcm_sz * i), fcm_sz,
-                              harts_mask, flags);
+                              harts_mask, flags, (void *)rpmi_clk);
         }
     } else {
         create_fdt_reset(s, virt_memmap, &phandle);
