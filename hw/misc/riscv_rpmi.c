@@ -130,7 +130,7 @@ static const TypeInfo riscv_rpmi_info = {
   */
  DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
                                 hwaddr fcm_addr, int fcm_sz,
-                                uint64_t harts_mask, uint32_t flags)
+                                uint64_t harts_mask, uint32_t flags, void *clock_data)
  {
      DeviceState *dev = qdev_new(TYPE_RISCV_RPMI);
      MemoryRegion *address_space_mem = get_system_memory();
@@ -168,7 +168,7 @@ static const TypeInfo riscv_rpmi_info = {
      }
 
      rpmi_init_transport(num_xports, shm_addr, db_addr, fcm_addr, socket_num,
-                         harts_mask);
+                         harts_mask, clock_data);
 
      num_xports++;
 

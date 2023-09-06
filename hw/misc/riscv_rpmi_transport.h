@@ -133,12 +133,13 @@ int rpmi_transport_init(struct rpmi_transport_ctx *trans_ctx);
 void memcpy_endian(int32_t *dest, int32_t *src, int32_t len,
                 bool to_le32);
 void rpmi_init_transport(int xport_id, hwaddr shm_addr, hwaddr reg_addr,
-                         hwaddr fcm_addr, int socket_num, uint64_t harts_mask);
+                         hwaddr fcm_addr, int socket_num, uint64_t harts_mask, void *clock_data);
 void handle_rpmi_shm(int xport_id);
 void handle_rpmi_fcm(int xport_id);
 hwaddr rpmi_get_fcm_base(int xport_id);
 int rpmi_get_svc_grps(int xport_id);
 uint64_t rpmi_get_harts_mask(int xport_id);
+void *rpmi_get_clock_data(int xport_id);
 
 int handle_rpmi_cppc_fcm(void *req_buf);
 int handle_rpmi_msg(struct rpmi_message *msg, int xport_id);
@@ -152,6 +153,7 @@ int handle_rpmi_grp_hsm(struct rpmi_message *msg, int xport_id);
 bool execute_rpmi_hsm_stop(void *env);
 int handle_rpmi_grp_sys_reset(struct rpmi_message *msg, int xport_id);
 int handle_rpmi_grp_suspend(struct rpmi_message *msg, int xport_id);
+int handle_rpmi_grp_clock(struct rpmi_message *msg, int xport_id);
 bool execute_rpmi_suspend(void *env);
 
 #endif
