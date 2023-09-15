@@ -96,6 +96,7 @@ bool execute_rpmi_hsm_stop(void *env)
     CPUState *cs = env_cpu(env);
     riscv_set_wfi_cb(env,  NULL);
     cs->stop = true;
+    cs->hold_stop = true;
     qemu_cpu_kick(cs);
     hart_states[cs->cpu_index] = RPMI_HSM_STATE_STOPPED;
     return true;
@@ -143,6 +144,7 @@ int handle_rpmi_grp_hsm(struct rpmi_message *msg, int xport_id)
             resp_data.stop.status = -1;
         } else {
             hart_states[cpu->cpu_index] = RPMI_HSM_STATE_START_PENDING;
+            cpu->hold_stop = false;
             cpu_resume(cpu);
             hart_states[cpu->cpu_index] = RPMI_HSM_STATE_STARTED;
             resp_data.start.status = 0;
