@@ -604,8 +604,11 @@ void pause_all_vcpus(void)
 
 void cpu_resume(CPUState *cpu)
 {
-    cpu->stop = false;
-    cpu->stopped = false;
+    if (!cpu->hold_stop) {
+        cpu->stop = false;
+        cpu->stopped = false;
+    }
+
     qemu_cpu_kick(cpu);
 }
 
