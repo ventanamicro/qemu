@@ -78,7 +78,8 @@ enum AcpiGenericErrorSeverity {
  * ACPI 4.0: 17.3.2.7 Hardware Error Notification
  * Composes dummy Hardware Error Notification descriptor of specified type
  */
-static void build_ghes_hw_error_notification(GArray *table, const uint8_t type)
+static void build_ghes_hw_error_notification(GArray *table, const uint8_t type,
+                                             uint32_t vector)
 {
     /* Type */
     build_append_int_noprefix(table, type, 1);
@@ -92,7 +93,7 @@ static void build_ghes_hw_error_notification(GArray *table, const uint8_t type)
     /* Poll Interval */
     build_append_int_noprefix(table, 0, 4);
     /* Vector */
-    build_append_int_noprefix(table, 0, 4);
+    build_append_int_noprefix(table, vector, 4);
     /* Switch To Polling Threshold Value */
     build_append_int_noprefix(table, 0, 4);
     /* Switch To Polling Threshold Window */
@@ -287,7 +288,8 @@ void build_ghes_error_table(GArray *hardware_errors, BIOSLinker *linker)
 }
 
 /* Build Generic Hardware Error Source version 2 (GHESv2) */
-static void build_ghes_v2(GArray *table_data, int source_id, BIOSLinker *linker)
+static void build_ghes_v2(GArray *table_data, int source_id, int notif_type,
+                          uint32_t vector, BIOSLinker *linker)
 {
     uint64_t address_offset;
     /*
@@ -319,13 +321,13 @@ static void build_ghes_v2(GArray *table_data, int source_id, BIOSLinker *linker)
         address_offset + GAS_ADDR_OFFSET, sizeof(uint64_t),
         ACPI_GHES_ERRORS_FW_CFG_FILE, source_id * sizeof(uint64_t));
 
-    switch (source_id) {
+    switch (notif_type) {
     case ACPI_HEST_SRC_ID_SEA:
         /*
          * Notification Structure
          * Now only enable ARMv8 SEA notification type
          */
-        build_ghes_hw_error_notification(table_data, ACPI_GHES_NOTIFY_SEA);
+        build_ghes_hw_error_notification(table_data, ACPI_GHES_NOTIFY_SEA, vector);
         break;
     default:
         error_report("Not support this error source");
@@ -359,7 +361,7 @@ static void build_ghes_v2(GArray *table_data, int source_id, BIOSLinker *linker)
 }
 
 /* Build Hardware Error Source Table */
-void acpi_build_hest(GArray *table_data, BIOSLinker *linker,
+void acpi_build_hest(GArray *table_data, BIOSLinker *linker, uint8_t notif_type,
                      const char *oem_id, const char *oem_table_id)
 {
     AcpiTable table = { .sig = "HEST", .rev = 1,
@@ -369,7 +371,8 @@ void acpi_build_hest(GArray *table_data, BIOSLinker *linker,
 
     /* Error Source Count */
     build_append_int_noprefix(table_data, ACPI_GHES_ERROR_SOURCE_COUNT, 4);
-    build_ghes_v2(table_data, ACPI_HEST_SRC_ID_SEA, linker);
+    /* Memory Error Source */
+    build_ghes_v2(table_data, 0, notif_type, 0, linker);
 
     acpi_table_end(linker, &table);
 }
