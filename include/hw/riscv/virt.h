@@ -95,6 +95,14 @@ enum {
     VIRT_PLATFORM_BUS,
     VIRT_PCIE_ECAM,
     VIRT_IOMMU_SYS,
+    VIRT_RERI_BANK_DRAM,
+    VIRT_RERI_BANK_HARTS,
+    VIRT_ACPI_GED,
+    VIRT_LAST_MEMMAP /* Keep this entry always last */
+};
+
+enum {
+    VIRT_HIGH_PCIE_MMIO = VIRT_LAST_MEMMAP,
 };
 
 enum {
@@ -123,6 +131,10 @@ enum {
 #define VIRT_PLIC_CONTEXT_STRIDE 0x1000
 #define VIRT_PLIC_SIZE(__num_context) \
     (VIRT_PLIC_CONTEXT_BASE + (__num_context) * VIRT_PLIC_CONTEXT_STRIDE)
+
+#define PER_HART_ERR_BANK_SIZE       0x1000
+#define HARTS_ERR_BANK_SIZE(__num_harts) \
+        (PER_HART_ERR_BANK_SIZE * __num_harts)
 
 #define FDT_PCI_ADDR_CELLS    3
 #define FDT_PCI_INT_CELLS     1
