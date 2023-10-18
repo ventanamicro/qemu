@@ -73,9 +73,75 @@ enum {
     ERROR_TYPE_MAX,
 };
 
+enum {
+    GPE_PROC_TYPE_VALID_BIT,
+    GPE_PROC_ISA_VALID_BIT,
+    GPE_PROC_ERR_TYPE_VALID_BIT,
+    GPE_OP_VALID_BIT,
+    GPE_FLAGS_VALID_BIT,
+    GPE_LEVEL_VALID_BIT,
+    GPE_CPU_VERSION_VALID_BIT,
+    GPE_CPU_BRAND_STRING_VALID_BIT,
+    GPE_CPU_ID_VALID_BIT,
+    GPE_TARGET_ADDR_VALID_BIT,
+    GPE_REQ_IDENT_VALID_BIT,
+    GPE_RESP_IDENT_VALID_BIT,
+    GPE_IP_VALID_BIT,
+    GPE_BIT_RESERVED_BITS,
+};
+
+#define GPE_PROC_TYPE_VALID             (1ul << GPE_PROC_TYPE_VALID_BIT)
+#define GPE_PROC_ISA_VALID              (1ul << GPE_PROC_ISA_VALID_BIT)
+#define GPE_PROC_ERR_TYPE_VALID         (1ul << GPE_PROC_ERR_TYPE_VALID_BIT)
+#define GPE_OP_VALID                    (1ul << GPE_OP_VALID_BIT)
+#define GPE_FLAGS_VALID                 (1ul << GPE_FLAGS_VALID_BIT)
+#define GPE_LEVEL_VALID                 (1ul << GPE_LEVEL_VALID_BIT)
+#define GPE_CPU_VERSION_VALID           (1ul << GPE_CPU_VERSION_VALID_BIT)
+#define GPE_CPU_BRAND_STRING_VALID      (1ul << GPE_CPU_BRAND_STRING_VALID_BIT)
+#define GPE_CPU_ID_VALID                (1ul << GPE_CPU_ID_VALID_BIT)
+#define GPE_TARGET_ADDR_VALID           (1ul << GPE_TARGET_ADDR_VALID_BIT)
+#define GPE_REQ_IDENT_VALID             (1ul << GPE_REQ_IDENT_VALID_BIT)
+#define GPE_RESP_IDENT_VALID            (1ul << GPE_RESP_IDENT_VALID_BIT)
+#define GPE_IP_VALID                    (1ul << GPE_IP_VALID_BIT)
+
+enum {
+     GHES_PROC_TYPE_IA32X64,
+     GHES_PROC_TYPE_IA64,
+     GHES_PROC_TYPE_ARM,
+     GHES_PROC_TYPE_RISCV,
+};
+
+enum {
+     GHES_PROC_ISA_IA32,
+     GHES_PROC_ISA_IA64,
+     GHES_PROC_ISA_X64,
+     GHES_PROC_ISA_ARM_A32,
+     GHES_PROC_ISA_ARM_A64,
+     GHES_PROC_ISA_RISCV32,
+     GHES_PROC_ISA_RISCV64,
+};
+
 typedef struct AcpiGhesErrorInfo {
     uint32_t etype;
     union {
+        struct {
+            uint32_t  validation_bits;
+            uint32_t  sev;
+            uint8_t   proc_type;
+            uint8_t   proc_isa;
+            uint8_t   proc_err_type;
+            uint8_t   operation;
+            uint8_t   flags;
+            uint8_t   level;
+            uint64_t  cpu_version;
+            uint8_t   cpu_brand_string[128];
+            uint64_t  cpu_id;
+            uint64_t  target_addr;
+            uint64_t  req_ident;
+            uint64_t  resp_ident;
+            uint64_t  ip;
+        } gpe; /* generic processor error */
+
         struct {
             uint64_t  physical_address;
         } me; /* DRAM Error */
