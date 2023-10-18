@@ -52,8 +52,10 @@ enum AcpiGhesNotifyType {
     ACPI_GHES_NOTIFY_GSIV = 10,
     /* Software Delegated Exception, ACPI 6.2: 18.3.2.9, Table 18-383 */
     ACPI_GHES_NOTIFY_SDEI = 11,
+    /* RISCV Supervisor Software Event */
+    ACPI_GHES_NOTIFY_SSE = 12,
     /* 12 and greater are reserved */
-    ACPI_GHES_NOTIFY_RESERVED = 12
+    ACPI_GHES_NOTIFY_RESERVED = 13
 };
 
 /*
