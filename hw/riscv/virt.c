@@ -1230,6 +1230,23 @@ static void create_fdt_rpmi_cppc(RISCVVirtState *s, uint64_t shmem_base,
     g_free(name);
 }
 
+static void create_fdt_rpmi_ras(RISCVVirtState *s, uint64_t shmem_base,
+                                 uint32_t rpmi_mbox_handle)
+{
+    char *name;
+    uint32_t rpmi_ras_servicegrp = 6;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/mailbox@%lx/ras@%lx",
+                           (long)shmem_base,
+                           (long)rpmi_ras_servicegrp);
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,rpmi-ras");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
+                           rpmi_mbox_handle, rpmi_ras_servicegrp);
+    g_free(name);
+}
+
 static void create_fdt_rpmi_nodes(RISCVVirtState *s, int xport_id,
                                   uint64_t shmem_base, uint64_t db_base,
                                   uint32_t *phandle)
@@ -1243,6 +1260,7 @@ static void create_fdt_rpmi_nodes(RISCVVirtState *s, int xport_id,
         create_fdt_rpmi_suspend(s, shmem_base, rpmi_mbox_handle);
         create_fdt_rpmi_clock(s, shmem_base, rpmi_mbox_handle);
         create_fdt_sbi_rpxy_clk(s, phandle, rpmi_mbox_handle);
+        create_fdt_rpmi_ras(s, shmem_base, rpmi_mbox_handle);
     } else {
         /* Socket transport will have rest of the no system service groups */
         create_fdt_rpmi_hsm(s, shmem_base, rpmi_mbox_handle);
