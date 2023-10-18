@@ -15,5 +15,6 @@ riscv_ss.add(when: 'CONFIG_RISCV_IOMMU', if_true: files(
 riscv_ss.add(when: 'CONFIG_MICROBLAZE_V', if_true: files('microblaze-v-generic.c'))
 riscv_ss.add(when: 'CONFIG_XIANGSHAN_KUNMINGHU', if_true: files('xiangshan_kmh.c'))
 riscv_ss.add(when: 'CONFIG_RISCV_RERI', if_true: files('riscv_reri_helper.c'))
+riscv_ss.add(when: 'CONFIG_RISCV_RERI', if_true: files('riscv_reri_hart_dev.c'))
 
 hw_arch += {'riscv': riscv_ss}
