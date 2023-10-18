@@ -13,5 +13,6 @@ riscv_ss.add(when: 'CONFIG_ACPI', if_true: files('virt-acpi-build.c'))
 riscv_ss.add(when: 'CONFIG_RISCV_IOMMU', if_true: files('riscv-iommu.c', 'riscv-iommu-pci.c'))
 riscv_ss.add(when: 'CONFIG_RISCV_RAS', if_true: files('riscv_reri_helper.c'))
 riscv_ss.add(when: 'CONFIG_RISCV_RAS', if_true: files('riscv_reri_hart_dev.c'))
+riscv_ss.add(when: 'CONFIG_RISCV_RAS', if_true: files('riscv_ras_agent.c'))
 
 hw_arch += {'riscv': riscv_ss}
