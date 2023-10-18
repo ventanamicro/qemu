@@ -60,6 +60,7 @@
 #include "hw/misc/riscv_rpmi_transport.h"
 #include "hw/misc/rpmi_clock.h"
 #include "hw/acpi/generic_event_device.h"
+#include "hw/riscv/riscv_ras_agent.h"
 
 /* KVM AIA only supports APLIC MSI. APLIC Wired is always emulated by QEMU. */
 static bool virt_use_kvm_aia(RISCVVirtState *s)
@@ -99,6 +100,17 @@ static const MemMapEntry virt_memmap[] = {
     [VIRT_PCIE_ECAM] =    { 0x30000000,    0x10000000 },
     [VIRT_PCIE_MMIO] =    { 0x40000000,    0x40000000 },
     [VIRT_DRAM] =         { 0x80000000,           0x0 },
+};
+
+#define MAX_RAS_ERR_SOURCES		1
+
+/* FIXME: Currently only one HART is supported. */
+RasErrorSource ras_err_srcs[MAX_RAS_ERR_SOURCES] = {
+    {
+        .sse_vector = 1,
+        .as = virt_memmap[VIRT_RERI_BANK_HARTS].base,
+        .size = HARTS_ERR_BANK_SIZE(1),
+    },
 };
 
 /* PCIe high mmio is fixed for RV32 */
@@ -1920,6 +1932,7 @@ static void virt_machine_init(MachineState *machine)
         s->acpi_dev = create_acpi_ged(virt_memmap[VIRT_ACPI_GED].base);
         /* RERI HART device emulator */
         riscv_create_harts_reri_dev(memmap[VIRT_RERI_BANK_HARTS].base);
+        riscv_ras_agent_init(&ras_err_srcs[0], MAX_RAS_ERR_SOURCES);
     }
 
     /* VirtIO MMIO devices */
