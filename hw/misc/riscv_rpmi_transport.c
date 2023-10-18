@@ -136,7 +136,9 @@ void rpmi_init_transport(int xport_id, hwaddr shm_addr, hwaddr reg_addr,
     if (socket_num == -1) {
         /* initialize SOC transport */
         xport_ctx->service_grp_mask |= ((1 << RPMI_SRVGRP_SYSTEM_RESET) |
-                                        (1 << RPMI_SRVGRP_SYSTEM_SUSPEND));
+                                        (1 << RPMI_SRVGRP_SYSTEM_SUSPEND) |
+                                        (1 << RPMI_SRVGRP_RAS_AGENT));
+
         if (clock_data)
             xport_ctx->service_grp_mask |= (1 << RPMI_SRVGRP_CLOCK);
     }
@@ -356,6 +358,11 @@ int handle_rpmi_msg(struct rpmi_message *msg, int xport_id)
     case RPMI_SRVGRP_CLOCK:
         handle_rpmi_grp_clock(msg, xport_id);
         break;
+
+    case RPMI_SRVGRP_RAS_AGENT:
+        handle_rpmi_grp_ras_agent(msg, xport_id);
+        break;
+
     default:
         qemu_log_mask(LOG_GUEST_ERROR, "%s: Unhandled service group id: %x\n",
                 __func__, svc_grp_id);
