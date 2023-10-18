@@ -1031,10 +1031,12 @@ static void riscv_cpu_set_irq(void *opaque, int irq, int level)
         case IRQ_U_EXT:
         case IRQ_VS_EXT:
         case IRQ_M_EXT:
+        case IRQ_RAS_LOW:
+        case IRQ_RAS_HIGH:
             if (kvm_enabled()) {
                 kvm_riscv_set_irq(cpu, irq, level);
             } else {
-                riscv_cpu_update_mip(env, 1 << irq, BOOL_TO_MASK(level));
+                riscv_cpu_update_mip(env, 1UL << irq, BOOL_TO_MASK(level));
             }
              break;
         case IRQ_S_EXT:
