@@ -41,7 +41,7 @@ enum {
 };
 
 /* Now only support ARMv8 SEA notification type error source */
-#define ACPI_GHES_ERROR_SOURCE_COUNT        1
+#define ACPI_GHES_ERROR_SOURCE_COUNT        ACPI_GHES_SOURCE_ID_MAX
 
 /* Generic Hardware Error Source version 2 */
 #define ACPI_GHES_SOURCE_GENERIC_ERROR_V2   10
@@ -246,57 +246,58 @@ static void acpi_ghes_build_append_gce_cper(GArray *table,
                                             AcpiGhesErrorInfo *einfo)
 {
     /* Validation Bits */
-    build_append_int_noprefix(table, einfo->gpe.validation_bits, 8);
+    build_append_int_noprefix(table, einfo->info.gpe.validation_bits, 8);
 
     /* Processor Type */
-    if (einfo->gpe.validation_bits & GPE_PROC_TYPE_VALID)
-        build_append_int_noprefix(table, einfo->gpe.proc_type, 1);
+    if (einfo->info.gpe.validation_bits & GPE_PROC_TYPE_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.proc_type, 1);
 
     /* ISA */
-    if (einfo->gpe.validation_bits & GPE_PROC_ISA_VALID)
-        build_append_int_noprefix(table, einfo->gpe.proc_isa, 1);
+    if (einfo->info.gpe.validation_bits & GPE_PROC_ISA_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.proc_isa, 1);
 
     /* Error Type */
-    if (einfo->gpe.validation_bits & GPE_PROC_ERR_TYPE_VALID)
-        build_append_int_noprefix(table, einfo->gpe.proc_err_type, 1);
+    if (einfo->info.gpe.validation_bits & GPE_PROC_ERR_TYPE_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.proc_err_type, 1);
 
     /* Operation */
-    if (einfo->gpe.validation_bits & GPE_OP_VALID)
-        build_append_int_noprefix(table, einfo->gpe.operation, 1);
+    if (einfo->info.gpe.validation_bits & GPE_OP_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.operation, 1);
 
     /* Flags */
-    if (einfo->gpe.validation_bits & GPE_FLAGS_VALID)
-        build_append_int_noprefix(table, einfo->gpe.flags, 1);
+    if (einfo->info.gpe.validation_bits & GPE_FLAGS_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.flags, 1);
 
     /* Level */
-    if (einfo->gpe.validation_bits & GPE_LEVEL_VALID)
-        build_append_int_noprefix(table, einfo->gpe.level, 1);
+    if (einfo->info.gpe.validation_bits & GPE_LEVEL_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.level, 1);
 
     /* Reserved - must always be zero */
     build_append_int_noprefix(table, 0, 2);
 
     /* CPU version */
-    if (einfo->gpe.validation_bits & GPE_CPU_VERSION_VALID)
-        build_append_int_noprefix(table, einfo->gpe.cpu_version, 8);
+    if (einfo->info.gpe.validation_bits & GPE_CPU_VERSION_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.cpu_version, 8);
 
-    if (einfo->gpe.validation_bits & GPE_CPU_ID_VALID)
-        build_append_int_noprefix(table, einfo->gpe.cpu_id, 8);
+    if (einfo->info.gpe.validation_bits & GPE_CPU_ID_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.cpu_id, 8);
 
-    if (einfo->gpe.validation_bits & GPE_TARGET_ADDR_VALID)
-        build_append_int_noprefix(table, einfo->gpe.target_addr, 8);
+    if (einfo->info.gpe.validation_bits & GPE_TARGET_ADDR_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.target_addr, 8);
 
-    if (einfo->gpe.validation_bits & GPE_REQ_IDENT_VALID)
-        build_append_int_noprefix(table, einfo->gpe.req_ident, 8);
+    if (einfo->info.gpe.validation_bits & GPE_REQ_IDENT_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.req_ident, 8);
 
-    if (einfo->gpe.validation_bits & GPE_RESP_IDENT_VALID)
-        build_append_int_noprefix(table, einfo->gpe.resp_ident, 8);
+    if (einfo->info.gpe.validation_bits & GPE_RESP_IDENT_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.resp_ident, 8);
 
-    if (einfo->gpe.validation_bits & GPE_IP_VALID)
-        build_append_int_noprefix(table, einfo->gpe.ip, 8);
+    if (einfo->info.gpe.validation_bits & GPE_IP_VALID)
+        build_append_int_noprefix(table, einfo->info.gpe.ip, 8);
 }
 
-static int acpi_ghes_record_generic_cpu_error(uint64_t error_block_address,
-                                              AcpiGhesErrorInfo *einfo)
+static int __attribute__((unused))
+acpi_ghes_record_generic_cpu_error(uint64_t error_block_address,
+                                   AcpiGhesErrorInfo *einfo)
 {
     GArray *block;
 
@@ -325,11 +326,11 @@ static int acpi_ghes_record_generic_cpu_error(uint64_t error_block_address,
 
     /* Build the new generic error status block header */
     acpi_ghes_generic_error_status(block, ACPI_GEBS_UNCORRECTABLE,
-        0, 0, data_length, einfo->gpe.sev);
+        0, 0, data_length, einfo->info.gpe.sev);
 
     /* Build this new generic error data entry header */
     acpi_ghes_generic_error_data(block, uefi_cper_generic_cpu_sec,
-        einfo->gpe.sev, 0, 0,
+        einfo->info.gpe.sev, 0, 0,
         ACPI_GHES_GENERIC_CPU_CPER_LENGTH, fru_id, 0);
 
     /* Build the memory section CPER for above new generic error data entry */
@@ -485,6 +486,9 @@ void acpi_build_hest(GArray *table_data, BIOSLinker *linker, uint8_t notif_type,
     /* Memory Error Source */
     build_ghes_v2(table_data, ACPI_GHES_DRAM_ERROR_SOURCE_ID,
                   notif_type, 0, linker);
+    /* Generic CPU Error Source */
+    build_ghes_v2(table_data, ACPI_GHES_GENERIC_CPU_ERROR_SOURCE_ID,
+                  notif_type, 1, linker);
 
     acpi_table_end(linker, &table);
 }
