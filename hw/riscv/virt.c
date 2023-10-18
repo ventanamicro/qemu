@@ -2011,6 +2011,20 @@ static void virt_set_rpmi(Object *obj, bool value, Error **errp)
     s->have_rpmi = value;
 }
 
+static bool virt_get_ras(Object *obj, Error **errp)
+{
+    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
+
+    return s->have_ras;
+}
+
+static void virt_set_ras(Object *obj, bool value, Error **errp)
+{
+    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
+
+    s->have_ras = value;
+}
+
 bool virt_is_acpi_enabled(RISCVVirtState *s)
 {
     return s->acpi != ON_OFF_AUTO_OFF;
@@ -2126,6 +2140,11 @@ static void virt_machine_class_init(ObjectClass *oc, void *data)
     object_class_property_set_description(oc, "rpmi",
                                           "Set on/off to enable/disable "
                                           "emulating RPMI devices");
+    object_class_property_add_bool(oc, "ras", virt_get_ras,
+                                   virt_set_ras);
+    object_class_property_set_description(oc, "ras",
+                                          "Set on/off to enable/disable "
+                                          "RERI/RAS support");
 }
 
 static const TypeInfo virt_machine_typeinfo = {
