@@ -707,6 +707,8 @@ typedef enum RISCVException {
 #define IRQ_M_EXT                          11
 #define IRQ_S_GEXT                         12
 #define IRQ_PMU_OVF                        13
+#define IRQ_RAS_LOW                        35
+#define IRQ_RAS_HIGH                       43
 #define IRQ_LOCAL_MAX                      64
 /* -1 is due to bit zero of hgeip and hgeie being ROZ. */
 #define IRQ_LOCAL_GUEST_MAX                (TARGET_LONG_BITS - 1)
@@ -729,6 +731,8 @@ typedef enum RISCVException {
 #define MIP_MEIP                           (1 << IRQ_M_EXT)
 #define MIP_SGEIP                          (1 << IRQ_S_GEXT)
 #define MIP_LCOFIP                         (1 << IRQ_PMU_OVF)
+#define MIP_RASLOP                         (1UL << IRQ_RAS_LOW)
+#define MIP_RASHIP                         (1UL << IRQ_RAS_HIGH)
 
 /* sip masks */
 #define SIP_SSIP                           MIP_SSIP
@@ -745,7 +749,7 @@ typedef enum RISCVException {
 #define MIE_USIE                           (1 << IRQ_U_SOFT)
 
 /* Machine constants */
-#define M_MODE_INTERRUPTS  ((uint64_t)(MIP_MSIP | MIP_MTIP | MIP_MEIP))
+#define M_MODE_INTERRUPTS  ((uint64_t)(MIP_MSIP | MIP_MTIP | MIP_MEIP | MIP_RASLOP | MIP_RASHIP))
 #define S_MODE_INTERRUPTS  ((uint64_t)(MIP_SSIP | MIP_STIP | MIP_SEIP))
 #define VS_MODE_INTERRUPTS ((uint64_t)(MIP_VSSIP | MIP_VSTIP | MIP_VSEIP))
 #define HS_MODE_INTERRUPTS ((uint64_t)(MIP_SGEIP | VS_MODE_INTERRUPTS))
