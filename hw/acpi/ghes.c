@@ -59,6 +59,9 @@ enum {
 /* The memory section CPER size, UEFI 2.6: N.2.5 Memory Error Section */
 #define ACPI_GHES_MEM_CPER_LENGTH           80
 
+/* The generic cpu CPER size, UEFI 2.10 2.4.1 Generic processor error */
+#define ACPI_GHES_GENERIC_CPU_CPER_LENGTH   192
+
 /* Masks for block_status flags */
 #define ACPI_GEBS_UNCORRECTABLE         1
 
@@ -229,6 +232,108 @@ static int acpi_ghes_record_mem_error(uint64_t error_block_address,
 
     /* Build the memory section CPER for above new generic error data entry */
     acpi_ghes_build_append_mem_cper(block, error_physical_addr);
+
+    /* Write the generic error data entry into guest memory */
+    cpu_physical_memory_write(error_block_address, block->data, block->len);
+
+    g_array_free(block, true);
+
+    return 0;
+}
+
+/* UEFI 2.10: N.2.4.1 Memory Error Section */
+static void acpi_ghes_build_append_gce_cper(GArray *table,
+                                            AcpiGhesErrorInfo *einfo)
+{
+    /* Validation Bits */
+    build_append_int_noprefix(table, einfo->gpe.validation_bits, 8);
+
+    /* Processor Type */
+    if (einfo->gpe.validation_bits & GPE_PROC_TYPE_VALID)
+        build_append_int_noprefix(table, einfo->gpe.proc_type, 1);
+
+    /* ISA */
+    if (einfo->gpe.validation_bits & GPE_PROC_ISA_VALID)
+        build_append_int_noprefix(table, einfo->gpe.proc_isa, 1);
+
+    /* Error Type */
+    if (einfo->gpe.validation_bits & GPE_PROC_ERR_TYPE_VALID)
+        build_append_int_noprefix(table, einfo->gpe.proc_err_type, 1);
+
+    /* Operation */
+    if (einfo->gpe.validation_bits & GPE_OP_VALID)
+        build_append_int_noprefix(table, einfo->gpe.operation, 1);
+
+    /* Flags */
+    if (einfo->gpe.validation_bits & GPE_FLAGS_VALID)
+        build_append_int_noprefix(table, einfo->gpe.flags, 1);
+
+    /* Level */
+    if (einfo->gpe.validation_bits & GPE_LEVEL_VALID)
+        build_append_int_noprefix(table, einfo->gpe.level, 1);
+
+    /* Reserved - must always be zero */
+    build_append_int_noprefix(table, 0, 2);
+
+    /* CPU version */
+    if (einfo->gpe.validation_bits & GPE_CPU_VERSION_VALID)
+        build_append_int_noprefix(table, einfo->gpe.cpu_version, 8);
+
+    if (einfo->gpe.validation_bits & GPE_CPU_ID_VALID)
+        build_append_int_noprefix(table, einfo->gpe.cpu_id, 8);
+
+    if (einfo->gpe.validation_bits & GPE_TARGET_ADDR_VALID)
+        build_append_int_noprefix(table, einfo->gpe.target_addr, 8);
+
+    if (einfo->gpe.validation_bits & GPE_REQ_IDENT_VALID)
+        build_append_int_noprefix(table, einfo->gpe.req_ident, 8);
+
+    if (einfo->gpe.validation_bits & GPE_RESP_IDENT_VALID)
+        build_append_int_noprefix(table, einfo->gpe.resp_ident, 8);
+
+    if (einfo->gpe.validation_bits & GPE_IP_VALID)
+        build_append_int_noprefix(table, einfo->gpe.ip, 8);
+}
+
+static int acpi_ghes_record_generic_cpu_error(uint64_t error_block_address,
+                                              AcpiGhesErrorInfo *einfo)
+{
+    GArray *block;
+
+    /* Generic CPU Error Section Type */
+    const uint8_t uefi_cper_generic_cpu_sec[] =
+            UUID_LE(0x9876CCAD, 0x47B4, 0x4bdb, 0xB6, 0x5E, 0x16, \
+                    0xF1, 0x93, 0xC4, 0xF3, 0xDB);
+
+    /* invalid fru id: ACPI 4.0: 17.3.2.6.1 Generic Error Data,
+     * Table 17-13 Generic Error Data Entry
+     */
+    QemuUUID fru_id = {};
+    uint32_t data_length;
+
+    block = g_array_new(false, true /* clear */, 1);
+
+    /* This is the length if adding a new generic error data entry*/
+    data_length = ACPI_GHES_DATA_LENGTH + ACPI_GHES_GENERIC_CPU_CPER_LENGTH;
+
+    /*
+     * It should not run out of the preallocated memory if adding a new generic
+     * error data entry
+     */
+    assert((data_length + ACPI_GHES_GESB_SIZE) <=
+            ACPI_GHES_MAX_RAW_DATA_LENGTH);
+
+    /* Build the new generic error status block header */
+    acpi_ghes_generic_error_status(block, ACPI_GEBS_UNCORRECTABLE,
+        0, 0, data_length, einfo->gpe.sev);
+
+    /* Build this new generic error data entry header */
+    acpi_ghes_generic_error_data(block, uefi_cper_generic_cpu_sec,
+        einfo->gpe.sev, 0, 0,
+        ACPI_GHES_GENERIC_CPU_CPER_LENGTH, fru_id, 0);
+
+    /* Build the memory section CPER for above new generic error data entry */
+    acpi_ghes_build_append_gce_cper(block, einfo);
 
     /* Write the generic error data entry into guest memory */
     cpu_physical_memory_write(error_block_address, block->data, block->len);
