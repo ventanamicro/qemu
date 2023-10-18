@@ -56,10 +56,15 @@ enum AcpiGhesNotifyType {
     ACPI_GHES_NOTIFY_RESERVED = 12
 };
 
+/*
+ * Error Source IDs for GHES. These are just place holders
+ * and each platform can define its own source ID for
+ * each error source.
+ */
 enum {
-    ACPI_HEST_SRC_ID_SEA = 0,
-    /* future ids go here */
-    ACPI_HEST_SRC_ID_RESERVED,
+    ACPI_GHES_DRAM_ERROR_SOURCE_ID,
+    ACPI_GHES_GENERIC_CPU_ERROR_SOURCE_ID,
+    ACPI_GHES_SOURCE_ID_MAX,
 };
 
 typedef struct AcpiGhesState {
