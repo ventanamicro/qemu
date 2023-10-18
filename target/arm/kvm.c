@@ -2376,7 +2376,8 @@ void kvm_arch_on_sigbus_vcpu(CPUState *c, int code, void *addr)
                 kvm_cpu_synchronize_state(c);
                 einfo.etype = ERROR_TYPE_MEM;
                 einfo.info.me.physical_address = paddr;
-                if (!acpi_ghes_record_errors(ACPI_HEST_SRC_ID_SEA, &einfo)) {
+                if (!acpi_ghes_record_errors(ACPI_GHES_DRAM_ERROR_SOURCE_ID,
+                                             &einfo)) {
                     kvm_inject_arm_sea(c);
                 } else {
                     error_report("failed to record the error");

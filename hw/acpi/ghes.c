@@ -34,12 +34,6 @@
 /* The max size in bytes for one error block */
 #define ACPI_GHES_MAX_RAW_DATA_LENGTH   (1 * KiB)
 
-enum {
-        ACPI_GHES_DRAM_ERROR_SOURCE_ID,
-        ACPI_GHES_GENERIC_CPU_ERROR_SOURCE_ID,
-        ACPI_GHES_SOURCE_ID_MAX,
-};
-
 /* Now only support ARMv8 SEA notification type error source */
 #define ACPI_GHES_ERROR_SOURCE_COUNT        ACPI_GHES_SOURCE_ID_MAX
 
@@ -432,18 +426,10 @@ static void build_ghes_v2(GArray *table_data, int source_id, int notif_type,
         address_offset + GAS_ADDR_OFFSET, sizeof(uint64_t),
         ACPI_GHES_ERRORS_FW_CFG_FILE, source_id * sizeof(uint64_t));
 
-    switch (notif_type) {
-    case ACPI_HEST_SRC_ID_SEA:
-        /*
-         * Notification Structure
-         * Now only enable ARMv8 SEA notification type
-         */
-        build_ghes_hw_error_notification(table_data, ACPI_GHES_NOTIFY_SEA, vector);
-        break;
-    default:
-        error_report("Not support this error source");
-        abort();
-    }
+    assert(notif_type < ACPI_GHES_NOTIFY_RESERVED);
+
+    /* Add notification type with vector */
+    build_ghes_hw_error_notification(table_data, notif_type, vector);
 
     /* Error Status Block Length */
     build_append_int_noprefix(table_data, ACPI_GHES_MAX_RAW_DATA_LENGTH, 4);
