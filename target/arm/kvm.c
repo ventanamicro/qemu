@@ -2352,6 +2352,7 @@ void kvm_arch_on_sigbus_vcpu(CPUState *c, int code, void *addr)
 {
     ram_addr_t ram_addr;
     hwaddr paddr;
+    AcpiGhesErrorInfo einfo;
 
     assert(code == BUS_MCEERR_AR || code == BUS_MCEERR_AO);
 
@@ -2373,7 +2374,9 @@ void kvm_arch_on_sigbus_vcpu(CPUState *c, int code, void *addr)
              */
             if (code == BUS_MCEERR_AR) {
                 kvm_cpu_synchronize_state(c);
-                if (!acpi_ghes_record_errors(ACPI_HEST_SRC_ID_SEA, paddr)) {
+                einfo.etype = ERROR_TYPE_MEM;
+                einfo.info.me.physical_address = paddr;
+                if (!acpi_ghes_record_errors(ACPI_HEST_SRC_ID_SEA, &einfo)) {
                     kvm_inject_arm_sea(c);
                 } else {
                     error_report("failed to record the error");

@@ -398,7 +398,11 @@ void acpi_ghes_add_fw_cfg(AcpiGhesState *ags, FWCfgState *s,
     ags->present = true;
 }
 
-int acpi_ghes_record_errors(uint8_t source_id, uint64_t physical_address)
+/*
+ * FIXME: source_id must be contiguous. Holes in between
+ * are not supported.
+ */
+int acpi_ghes_record_errors(uint8_t source_id, AcpiGhesErrorInfo *einfo)
 {
     uint64_t error_block_addr, read_ack_register_addr, read_ack_register = 0;
     uint64_t start_addr;
@@ -415,7 +419,7 @@ int acpi_ghes_record_errors(uint8_t source_id, uint64_t physical_address)
 
     start_addr = le64_to_cpu(ags->ghes_addr_le);
 
-    if (physical_address) {
+    if (einfo->etype == ERROR_TYPE_MEM && einfo->info.me.physical_address) {
 
         if (source_id < ACPI_HEST_SRC_ID_RESERVED) {
             start_addr += source_id * sizeof(uint64_t);
@@ -446,7 +450,7 @@ int acpi_ghes_record_errors(uint8_t source_id, uint64_t physical_address)
                 &read_ack_register, sizeof(uint64_t));
 
             ret = acpi_ghes_record_mem_error(error_block_addr,
-                                             physical_address);
+                                             einfo->info.me.physical_address);
         } else
             error_report("can not find Generic Error Status Block");
     }
