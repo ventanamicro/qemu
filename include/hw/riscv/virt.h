@@ -62,6 +62,7 @@ struct RISCVVirtState {
     char *oem_id;
     char *oem_table_id;
     OnOffAuto acpi;
+    DeviceState *acpi_dev;
     const MemMapEntry *memmap;
     struct GPEXHost *gpex_host;
 };
