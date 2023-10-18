@@ -34,6 +34,12 @@
 /* The max size in bytes for one error block */
 #define ACPI_GHES_MAX_RAW_DATA_LENGTH   (1 * KiB)
 
+enum {
+        ACPI_GHES_DRAM_ERROR_SOURCE_ID,
+        ACPI_GHES_GENERIC_CPU_ERROR_SOURCE_ID,
+        ACPI_GHES_SOURCE_ID_MAX,
+};
+
 /* Now only support ARMv8 SEA notification type error source */
 #define ACPI_GHES_ERROR_SOURCE_COUNT        1
 
@@ -372,7 +378,8 @@ void acpi_build_hest(GArray *table_data, BIOSLinker *linker, uint8_t notif_type,
     /* Error Source Count */
     build_append_int_noprefix(table_data, ACPI_GHES_ERROR_SOURCE_COUNT, 4);
     /* Memory Error Source */
-    build_ghes_v2(table_data, 0, notif_type, 0, linker);
+    build_ghes_v2(table_data, ACPI_GHES_DRAM_ERROR_SOURCE_ID,
+                  notif_type, 0, linker);
 
     acpi_table_end(linker, &table);
 }
@@ -399,7 +406,7 @@ int acpi_ghes_record_errors(uint8_t source_id, uint64_t physical_address)
     AcpiGedState *acpi_ged_state;
     AcpiGhesState *ags;
 
-    assert(source_id < ACPI_HEST_SRC_ID_RESERVED);
+    assert(source_id < ACPI_GHES_SOURCE_ID_MAX);
 
     acpi_ged_state = ACPI_GED(object_resolve_path_type("", TYPE_ACPI_GED,
                                                        NULL));
