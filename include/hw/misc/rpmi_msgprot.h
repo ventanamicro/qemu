@@ -7,6 +7,7 @@
   *
   * Authors:
   * Rahul Pathak <rpathak@ventanamicro.com>
+  * Himanshu Chauhan <hchauhan@ventanamicro.com>
   *
   * This program is free software; you can redistribute it and/or modify
   * it under the terms of the GNU General Public License as published by
@@ -183,6 +184,7 @@ enum rpmi_servicegroup_id {
         RPMI_SRVGRP_SYSTEM_SUSPEND = 0x00003,
         RPMI_SRVGRP_HSM = 0x00004,
         RPMI_SRVGRP_CPPC = 0x00005,
+        RPMI_SRVGRP_RAS_AGENT = 0x00006,
         RPMI_SRVGRP_CLOCK = 0x00007,
         RPMI_SRVGRP_ID_MAX_COUNT,
 };
@@ -484,6 +486,54 @@ enum rpmi_clock_service_id {
     RPMI_CLK_SRV_SET_RATE = 0x07,
     RPMI_CLK_SRV_GET_RATE = 0x08,
     RPMI_CLK_SRV_ID_MAX_COUNT,
+};
+
+/** RPMI RAS-Agent ServiceGroup Service IDs */
+enum rpmi_ras_service_id {
+	RPMI_RAS_SRV_PROBE_REQ = 0x01,
+	RPMI_RAS_SRV_SYNC_HART_ERR_REQ,
+	RPMI_RAS_SRV_SYNC_DEV_ERR_REQ,
+	RPMI_RAS_SRV_GET_PEND_VECS_REQ,
+	RPMI_RAS_SRV_SYNC_ERR_RESP,
+	RPMI_RAS_SRV_MAX_COUNT,
+};
+
+struct rpmi_ras_probe_req {
+	u32 dummy;
+};
+
+struct rpmi_ras_probe_resp {
+        s32 status;
+	u32 version;
+};
+
+struct rpmi_ras_sync_hart_err_req {
+	u32 hart_id;
+};
+
+struct rpmi_ras_sync_dev_err_req {
+	u32 dummy;
+};
+
+struct rpmi_ras_pend_vecs_req {
+#define INVALID_LAST_VEC 0xFFFFFFFFUL
+	u32 last_vec;
+};
+
+/*
+ * List of vectors needing attention. These might be
+ * more than that can be sent in single message.
+ *
+ * `remaining` will contain the number of vectors
+ * remaining. SBI implementation should request
+ * remaining vectors by GET_PEND_VECS request.
+ */
+struct rpmi_ras_sync_err_resp {
+	u32 status;
+	u32 remaining;
+	u32 returned;
+#define MAX_PEND_VECS	((RPMI_MSG_DATA_SIZE - (sizeof(u32) * 3)) / sizeof(u32))
+	u32 pending_vecs[MAX_PEND_VECS];
 };
 
 #define SET_TOKEN(msg, seq)         \
