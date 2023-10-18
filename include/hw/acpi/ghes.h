@@ -67,12 +67,27 @@ typedef struct AcpiGhesState {
     bool present; /* True if GHES is present at all on this board */
 } AcpiGhesState;
 
+enum {
+    ERROR_TYPE_MEM,
+    ERROR_TYPE_GENERIC_CPU,
+    ERROR_TYPE_MAX,
+};
+
+typedef struct AcpiGhesErrorInfo {
+    uint32_t etype;
+    union {
+        struct {
+            uint64_t  physical_address;
+        } me; /* DRAM Error */
+    } info;
+} AcpiGhesErrorInfo;
+
 void build_ghes_error_table(GArray *hardware_errors, BIOSLinker *linker);
 void acpi_build_hest(GArray *table_data, BIOSLinker *linker, uint8_t notif_type,
                      const char *oem_id, const char *oem_table_id);
 void acpi_ghes_add_fw_cfg(AcpiGhesState *vms, FWCfgState *s,
                           GArray *hardware_errors);
-int acpi_ghes_record_errors(uint8_t notify, uint64_t error_physical_addr);
+int acpi_ghes_record_errors(uint8_t source_id, AcpiGhesErrorInfo *einfo);
 
 /**
  * acpi_ghes_present: Report whether ACPI GHES table is present
