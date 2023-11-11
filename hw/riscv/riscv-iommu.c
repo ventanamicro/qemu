@@ -234,8 +234,7 @@ static int riscv_iommu_spa_fetch(RISCVIOMMUState *s, RISCVIOMMUContext *ctx,
     en_s = satp != RISCV_IOMMU_DC_FSC_MODE_BARE && !gpa;
     en_g = gatp != RISCV_IOMMU_DC_IOHGATP_MODE_BARE;
 
-    /* Early check for MSI address match when IOVA == GPA */
-    if (!en_s && (iotlb->perm & IOMMU_WO) &&
+    if ((iotlb->perm & IOMMU_WO) &&
         riscv_iommu_msi_check(s, ctx, iotlb->iova)) {
         iotlb->target_as = &s->trap_as;
         iotlb->translated_addr = iotlb->iova;
