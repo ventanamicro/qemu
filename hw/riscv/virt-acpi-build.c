@@ -52,6 +52,84 @@ typedef struct AcpiBuildState {
     bool patched;
 } AcpiBuildState;
 
+static void riscv_acpi_cpus_add_lpi(Aml *dev)
+{
+    /* LPI[0]  - Default WFI */
+    Aml *lpi0 = aml_package(10);
+    aml_append(lpi0, aml_int(1));    /* Min Residency */
+    aml_append(lpi0, aml_int(1));    /* Worst case wakeup latency */
+    aml_append(lpi0, aml_int(1));    /* Flags */
+    aml_append(lpi0, aml_int(0));    /* Arch Context loss flags */
+    aml_append(lpi0, aml_int(100));  /* Residency counter frequency */
+    aml_append(lpi0, aml_int(0));    /* Enabled parent state */
+
+    Aml *entry0 = aml_resource_template();
+    build_append_int_noprefix(entry0->buf, 0x82, 1);    /* descriptor */
+    build_append_int_noprefix(entry0->buf, 0x12, 1);    /* length[7:0] */
+    build_append_int_noprefix(entry0->buf, 0x0, 1);     /* length[15:8] */
+    build_append_gas(entry0->buf, AML_AS_FFH, 0x40, 0, 4, 0x0);
+    aml_append(lpi0, entry0);
+
+    Aml *use_res_count = aml_resource_template();
+    build_append_int_noprefix(use_res_count->buf, 0x82, 1);  /* descriptor */
+    build_append_int_noprefix(use_res_count->buf, 0x12, 1);  /* length[7:0] */
+    build_append_int_noprefix(use_res_count->buf, 0x0, 1);   /* length[15:8] */
+    build_append_gas(use_res_count->buf, AML_AS_SYSTEM_MEMORY, 0, 0, 0, 0);
+
+    aml_append(lpi0, use_res_count);
+    aml_append(lpi0, use_res_count);
+    aml_append(lpi0, aml_string("RISC-V WFI"));
+
+    /* LPI[1] */
+    Aml *lpi1 = aml_package(10);
+    aml_append(lpi1, aml_int(10));  /* Min Residency */
+    aml_append(lpi1, aml_int(10));  /* Worst case wakeup latency */
+    aml_append(lpi1, aml_int(1));   /* Flags */
+    aml_append(lpi1, aml_int(0));   /* Arch Context loss flags */
+    aml_append(lpi1, aml_int(100)); /* Residency counter frequency */
+    aml_append(lpi1, aml_int(1));   /* Enabled parent state */
+
+    Aml *entry1 = aml_resource_template();
+    build_append_int_noprefix(entry1->buf, 0x82, 1);    /* descriptor */
+    build_append_int_noprefix(entry1->buf, 0x12, 1);    /* length[7:0] */
+    build_append_int_noprefix(entry1->buf, 0x0, 1);     /* length[15:8] */
+    build_append_gas(entry1->buf, AML_AS_FFH, 0x40, 0, 4, 0x1000000000000000);
+    aml_append(lpi1, entry1);
+    aml_append(lpi1, use_res_count);
+    aml_append(lpi1, use_res_count);
+    aml_append(lpi1, aml_string("RISC-V RET_DEFAULT"));
+
+    /* LPI[2] */
+    Aml *lpi2 = aml_package(10);
+    aml_append(lpi2, aml_int(3500)); /* Min Residency */
+    aml_append(lpi2, aml_int(100));  /* Worst case wakeup latency */
+    aml_append(lpi2, aml_int(1));    /* Flags */
+    aml_append(lpi2, aml_int(0));    /* Arch Context loss flags */
+    aml_append(lpi2, aml_int(100));  /* Residency counter frequency */
+    aml_append(lpi2, aml_int(1));    /* Enabled parent state */
+
+    Aml *entry2 = aml_resource_template();
+    build_append_int_noprefix(entry2->buf, 0x82, 1);    /* descriptor */
+    build_append_int_noprefix(entry2->buf, 0x12, 1);    /* length[7:0] */
+    build_append_int_noprefix(entry2->buf, 0x0, 1);     /* length[15:8] */
+    build_append_gas(entry2->buf, AML_AS_FFH, 0x40, 0, 4, 0x1000000080000000);
+    aml_append(lpi2, entry2);
+    aml_append(lpi2, use_res_count);
+    aml_append(lpi2, use_res_count);
+    aml_append(lpi2, aml_string("RISC-V NONRET_DEFAULT"));
+
+    /*  _LPI */
+    Aml *pkg = aml_package(6);
+    aml_append(pkg, aml_int(0)); /* Version */
+    aml_append(pkg, aml_int(0)); /* Level Index */
+    aml_append(pkg, aml_int(3)); /* Count */
+    aml_append(pkg, lpi0);
+    aml_append(pkg, lpi1);
+    aml_append(pkg, lpi2);
+
+    aml_append(dev, aml_name_decl("_LPI", pkg));
+}
+
 static void acpi_align_size(GArray *blob, unsigned align)
 {
     /*
@@ -130,6 +208,7 @@ static void acpi_dsdt_add_cpus(Aml *scope, RISCVVirtState *s)
             aml_append(dev, aml_name_decl("_UID",
                        aml_int(arch_ids->cpus[i].arch_id)));
 
+            riscv_acpi_cpus_add_lpi(dev);
             /* build _MAT object */
             riscv_acpi_madt_add_rintc(i, arch_ids, madt_buf, s);
             aml_append(dev, aml_name_decl("_MAT",
