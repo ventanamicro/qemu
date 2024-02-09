@@ -52,7 +52,7 @@ typedef struct AcpiBuildState {
     bool patched;
 } AcpiBuildState;
 
-static void acpi_dsdt_add_pclpi_osc(Aml *scope)
+static void acpi_dsdt_add_plat_osc(Aml *scope)
 {
     Aml *method, *UUID, *if_uuid, *else_uuid;
     Aml *if_arg1_not_1, *else_arg1_not_1;
@@ -77,7 +77,7 @@ static void acpi_dsdt_add_pclpi_osc(Aml *scope)
     aml_append(if_uuid, if_arg1_not_1);
     else_arg1_not_1 = aml_else();
     aml_append(else_arg1_not_1,
-               aml_and(aml_name("CDW2"), aml_int(0x80), aml_name("CDW2")));
+               aml_and(aml_name("CDW2"), aml_int(0xC0), aml_name("CDW2")));
     aml_append(if_uuid, else_arg1_not_1);
     aml_append(if_uuid, aml_return(aml_arg(3)));
     aml_append(method, if_uuid);
@@ -96,6 +96,87 @@ static void acpi_dsdt_add_pclpi_osc(Aml *scope)
     aml_append(method, else_uuid);
 
     aml_append(scope, method);
+}
+
+static void riscv_acpi_cpus_add_psd(int cpu, Aml *dev)
+{
+    /*
+     * _PSD
+     */
+    Aml *psd = aml_package(1);
+    Aml *sub_psd = aml_package(5);
+    aml_append(sub_psd, aml_int(5));
+    aml_append(sub_psd, aml_int(0));
+    aml_append(sub_psd, aml_int(cpu));
+    aml_append(sub_psd, aml_int(0xFD));
+    aml_append(sub_psd, aml_int(1));
+    aml_append(psd, sub_psd);
+    aml_append(dev, aml_name_decl("_PSD", psd));
+}
+
+static void riscv_acpi_cpus_add_cpc(Aml *dev)
+{
+    /*
+     * Create _CPC object common across all cpus
+     */
+    Aml *cpc = aml_package(23);
+    aml_append(cpc, aml_int(23));     /* NumEntries */
+    aml_append(cpc, aml_int(3));      /* Revision */
+    aml_append(cpc, aml_int(5));      /* HighestPerformance */
+    aml_append(cpc, aml_int(4));      /* NominalPerformance */
+    aml_append(cpc, aml_int(2));      /* LowestNonlinearPerformance */
+    aml_append(cpc, aml_int(2));      /* LowestPerformance */
+
+    Aml *unimp = aml_resource_template();
+    build_append_int_noprefix(unimp->buf, 0x82, 1);  /* descriptor */
+    build_append_int_noprefix(unimp->buf, 0x12, 1);  /* length[7:0] */
+    build_append_int_noprefix(unimp->buf, 0x0, 1);   /* length[15:8] */
+    build_append_gas(unimp->buf, AML_AS_SYSTEM_MEMORY, 0, 0, 0, 0);
+    aml_append(cpc, unimp);           /* GuaranteedPerformanceRegister */
+
+    Aml *desired_perf = aml_resource_template();
+    build_append_int_noprefix(desired_perf->buf, 0x82, 1);  /* descriptor */
+    build_append_int_noprefix(desired_perf->buf, 0x12, 1);  /* length[7:0] */
+    build_append_int_noprefix(desired_perf->buf, 0x0, 1);   /* length[15:8] */
+    build_append_gas(desired_perf->buf, AML_AS_FFH, 0x40, 0, 4, 0x1000000000000005);
+    aml_append(cpc, desired_perf);    /* DesiredPerformanceRegister */
+
+    aml_append(cpc, unimp);    /* MinimumPerformanceRegister */
+    aml_append(cpc, unimp);    /* MaximumPerformanceRegister */
+    aml_append(cpc, unimp);    /* PerformanceReductionToleranceRegister, */
+
+    Aml *time_window = aml_resource_template();
+    build_append_int_noprefix(time_window->buf, 0x82, 1);  /* descriptor */
+    build_append_int_noprefix(time_window->buf, 0x12, 1);  /* length[7:0] */
+    build_append_int_noprefix(time_window->buf, 0x0, 1);   /* length[15:8] */
+    build_append_gas(time_window->buf, AML_AS_FFH, 0x40, 0, 4, 0x1000000000000009);
+    aml_append(cpc, time_window);     /* TimeWindowRegister */
+
+    aml_append(cpc, unimp);           /* CounterWraparoundTime */
+
+    Aml *ref_perf_counter = aml_resource_template();
+    build_append_int_noprefix(ref_perf_counter->buf, 0x82, 1);  /* descriptor */
+    build_append_int_noprefix(ref_perf_counter->buf, 0x12, 1); /* length[7:0] */
+    build_append_int_noprefix(ref_perf_counter->buf, 0x0, 1); /* length[15:8] */
+    build_append_gas(ref_perf_counter->buf, AML_AS_FFH, 0x40, 0, 4, 0x2000000000000C01);
+    aml_append(cpc, ref_perf_counter);/* ReferencePerformanceCounterRegister */
+
+    Aml *del_perf_counter = aml_resource_template();
+    build_append_int_noprefix(del_perf_counter->buf, 0x82, 1);  /* descriptor */
+    build_append_int_noprefix(del_perf_counter->buf, 0x12, 1); /* length[7:0] */
+    build_append_int_noprefix(del_perf_counter->buf, 0x0, 1); /* length[15:8] */
+    build_append_gas(del_perf_counter->buf, AML_AS_FFH, 0x40, 0, 4, 0x100000000000000C);
+    aml_append(cpc, del_perf_counter);/* DeliveredPerformanceCounterRegister */
+
+    aml_append(cpc, unimp);           /* PerformanceLimitedRegister */
+    aml_append(cpc, unimp);           /* CPPCEnableRegister */
+    aml_append(cpc, unimp);           /* AutonomousSelectionEnable */
+    aml_append(cpc, unimp);           /* AutonomousActivityWindowRegister */
+    aml_append(cpc, unimp);           /* EnergyPerformancePreferenceRegister */
+    aml_append(cpc, aml_int(1));      /* ReferencePerformance */
+    aml_append(cpc, aml_int(40));    /* LowestFrequency - 40MHz */
+    aml_append(cpc, aml_int(80));   /* NominalFrequency - 80MHz */
+    aml_append(dev, aml_name_decl("_CPC", cpc));
 }
 
 static void riscv_acpi_cpus_add_lpi(Aml *dev)
@@ -255,6 +336,8 @@ static void acpi_dsdt_add_cpus(Aml *scope, RISCVVirtState *s)
                        aml_int(arch_ids->cpus[i].arch_id)));
 
             riscv_acpi_cpus_add_lpi(dev);
+            riscv_acpi_cpus_add_psd(i, dev);
+            riscv_acpi_cpus_add_cpc(dev);
             /* build _MAT object */
             riscv_acpi_madt_add_rintc(i, arch_ids, madt_buf, s);
             aml_append(dev, aml_name_decl("_MAT",
@@ -586,7 +669,7 @@ static void build_dsdt(GArray *table_data,
      */
     scope = aml_scope("\\_SB");
     acpi_dsdt_add_cpus(scope, s);
-    acpi_dsdt_add_pclpi_osc(scope);
+    acpi_dsdt_add_plat_osc(scope);
 
     fw_cfg_acpi_dsdt_add(scope, &memmap[VIRT_FW_CFG]);
 
