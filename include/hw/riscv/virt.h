@@ -158,4 +158,6 @@ uint32_t imsic_num_bits(uint32_t count);
 #error "Can't accommodate all IMSIC groups in address space"
 #endif
 
+extern uint16_t iommu_bdf;
+
 #endif

@@ -1882,6 +1882,8 @@ static HotplugHandler *virt_machine_get_hotplug_handler(MachineState *machine,
     return NULL;
 }
 
+uint16_t iommu_bdf;
+
 static void virt_machine_device_plug_cb(HotplugHandler *hotplug_dev,
                                         DeviceState *dev, Error **errp)
 {
@@ -1901,8 +1903,9 @@ static void virt_machine_device_plug_cb(HotplugHandler *hotplug_dev,
     }
 
     if (object_dynamic_cast(OBJECT(dev), TYPE_RISCV_IOMMU_PCI)) {
-        create_fdt_iommu(s, pci_get_bdf(PCI_DEVICE(dev)));
         s->iommu_sys = ON_OFF_AUTO_OFF;
+        iommu_bdf = pci_get_bdf(PCI_DEVICE(dev));
+        create_fdt_iommu(s, iommu_bdf);
     }
 }
 
