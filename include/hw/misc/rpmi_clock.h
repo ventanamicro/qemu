@@ -34,9 +34,9 @@ struct rpmi_clk_rate {
 #define RPMI_CLK_NAME_MAX_LEN           16
 
 enum rpmi_clk_rate_match {
-    RPMI_CLK_RATE_ROUND_DOWN = 0,
-    RPMI_CLK_RATE_ROUND_UP = 1,
-    RPMI_CLK_RATE_PLATFORM = 2,
+    RPMI_CLK_RATE_PLATFORM = 0,
+    RPMI_CLK_RATE_ROUND_DOWN = 1,
+    RPMI_CLK_RATE_ROUND_UP = 2,
     RPMI_CLK_RATE_MATCH_MAX_IDX,
 };
 
