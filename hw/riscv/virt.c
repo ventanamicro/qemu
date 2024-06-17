@@ -1985,14 +1985,17 @@ static void virt_machine_init(MachineState *machine)
         sifive_test_create(memmap[VIRT_TEST].base);
     }
 
+    if (s->have_reri) {
+        /* RERI HART device emulator */
+        riscv_create_harts_reri_dev(memmap[VIRT_RERI_BANK_HARTS].base);
+    }
+
     if (s->have_ras) {
         /*
          * Location where EDK2 will patch the allocated base address
          * of Error status and CPER records.
          */
         s->acpi_dev = create_acpi_ged(virt_memmap[VIRT_ACPI_GED].base);
-        /* RERI HART device emulator */
-        riscv_create_harts_reri_dev(memmap[VIRT_RERI_BANK_HARTS].base);
         riscv_ras_agent_init(&ras_err_srcs[0], MAX_RAS_ERR_SOURCES);
     }
 
@@ -2145,6 +2148,20 @@ static void virt_set_ras(Object *obj, bool value, Error **errp)
     s->have_ras = value;
 }
 
+static bool virt_get_reri(Object *obj, Error **errp)
+{
+    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
+
+    return s->have_reri;
+}
+
+static void virt_set_reri(Object *obj, bool value, Error **errp)
+{
+    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
+
+    s->have_reri = value;
+}
+
 bool virt_is_acpi_enabled(RISCVVirtState *s)
 {
     return s->acpi != ON_OFF_AUTO_OFF;
@@ -2266,6 +2283,11 @@ static void virt_machine_class_init(ObjectClass *oc, void *data)
     object_class_property_set_description(oc, "rpmi",
                                           "Set on/off to enable/disable "
                                           "emulating RPMI devices");
+    object_class_property_add_bool(oc, "reri", virt_get_reri,
+                                   virt_set_reri);
+    object_class_property_set_description(oc, "reri",
+                                          "Set on/off to enable/disable "
+                                          "RERI support");
     object_class_property_add_bool(oc, "ras", virt_get_ras,
                                    virt_set_ras);
     object_class_property_set_description(oc, "ras",
