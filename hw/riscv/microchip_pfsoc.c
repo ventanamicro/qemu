@@ -646,6 +646,7 @@ static void microchip_icicle_kit_machine_init(MachineState *machine)
             }
 
             fdt_load_addr = riscv_compute_fdt_addr(kernel_ram_base, kernel_ram_size,
+                                                   0,
                                                    machine, &boot_info);
             riscv_load_fdt(fdt_load_addr, machine->fdt);
         } else {
