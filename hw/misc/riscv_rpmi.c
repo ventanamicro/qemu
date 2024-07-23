@@ -43,6 +43,7 @@ void add_sysreset_group(struct rpmi_context *rctx);
 int add_hsm_group(struct rpmi_context *rctx, uint64_t harts_mask,
                   uint32_t soc_xport_type);
 void add_syssusp_group(struct rpmi_context *rctx, void *rpmi_hsm);
+int add_clock_group(struct rpmi_context *rctx);
 void *get_soc_hsm_context(void);
 struct rpmi_shmem *rpmi_shmem_qemu_create(const char *name, rpmi_uint64_t base,
                                             rpmi_uint32_t size);
@@ -229,6 +230,9 @@ int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
 
         /* create sysreset group */
         add_syssusp_group(rctx, get_soc_hsm_context());
+
+        /* create rpmi clock service group */
+        add_clock_group(rctx);
     }
 
     /* save the context */
