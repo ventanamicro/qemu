@@ -1233,12 +1233,63 @@ static void create_fdt_rpmi_cppc(RISCVVirtState *s, uint64_t shmem_base,
     g_free(name);
 }
 
+static void create_fdt_sbi_mbox(RISCVVirtState *s, uint32_t *phandle,
+                                uint32_t *mpxy_mbox_phandle)
+{
+    char *name;
+    MachineState *mc = MACHINE(s);
+    uint32_t mbox_phandle = (*phandle)++;
+
+    name = g_strdup_printf("/soc/sbi-mpxy-mbox");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,sbi-mpxy-mbox");
+    qemu_fdt_setprop_cell(mc->fdt, name, "#mbox-cells", 1);
+    qemu_fdt_setprop_cell(mc->fdt, name, "phandle", mbox_phandle);
+    *mpxy_mbox_phandle = mbox_phandle;
+    g_free(name);
+}
+
+static void create_fdt_sbi_mpxy_clk(RISCVVirtState *s, uint32_t mpxy_mbox_phandle)
+{
+    char *name;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/rpmi-clk");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,rpmi-clock");
+    qemu_fdt_setprop_cell(mc->fdt, name, "#clock-cells", 1);
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes", mpxy_mbox_phandle, 0x1000);
+    g_free(name);
+}
+
+static void create_fdt_rpmi_clock(RISCVVirtState *s, uint64_t shmem_base,
+                                  uint32_t *phandle, uint32_t rpmi_mbox_handle,
+                                  uint32_t *rpmi_clock_handle)
+{
+    char *name;
+    uint32_t clock_servicegrp = 7;
+    *rpmi_clock_handle = (*phandle)++;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/mailbox@%lx/clock@%lx",
+                           (long)shmem_base,
+                           (long)clock_servicegrp);
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible",
+                            "riscv,rpmi-mpxy-clk");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
+            rpmi_mbox_handle, clock_servicegrp);
+    qemu_fdt_setprop_cells(mc->fdt, name, "phandle", *rpmi_clock_handle);
+    qemu_fdt_setprop_cell(mc->fdt,  name, "riscv,sbi-mpxy-channel-id", 0x1000);
+    g_free(name);
+}
+
 static void create_fdt_rpmi_nodes(RISCVVirtState *s, int xport_id,
                                   uint64_t shmem_base, uint64_t db_base,
                                   uint32_t *phandle, uint32_t soc_xport_type,
                                   uint32_t qsz, uint32_t dbsz)
 {
-    uint32_t rpmi_mbox_handle = 1;
+    uint32_t rpmi_mbox_handle = 1, rpmi_clock_handle = 1, mbox_phandle = 1;
 
     create_fdt_rpmi_mbox(s, shmem_base, db_base, phandle, &rpmi_mbox_handle,
                          qsz, dbsz);
@@ -1246,6 +1297,9 @@ static void create_fdt_rpmi_nodes(RISCVVirtState *s, int xport_id,
         /* SOC transport will have only reset and suspend*/
         create_fdt_rpmi_sysreset(s, shmem_base, rpmi_mbox_handle);
         create_fdt_rpmi_suspend(s, shmem_base, rpmi_mbox_handle);
+        create_fdt_rpmi_clock(s, shmem_base, phandle, rpmi_mbox_handle, &rpmi_clock_handle);
+        create_fdt_sbi_mbox(s, phandle, &mbox_phandle);
+        create_fdt_sbi_mpxy_clk(s, mbox_phandle);
     } else {
         /* Socket transport will have rest of the no system service groups */
         create_fdt_rpmi_hsm(s, shmem_base, rpmi_mbox_handle);
