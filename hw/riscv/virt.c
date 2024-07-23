@@ -52,6 +52,7 @@
 #include "system/kvm.h"
 #include "system/tpm.h"
 #include "system/qtest.h"
+#include "system/runstate.h"
 #include "hw/pci/pci.h"
 #include "hw/pci-host/gpex.h"
 #include "hw/display/ramfb.h"
@@ -1250,13 +1251,140 @@ static void create_fdt_rpmi_cppc(RISCVVirtState *s, uint64_t shmem_base,
     g_free(name);
 }
 
+static void create_fdt_sbi_mbox(RISCVVirtState *s, uint32_t *phandle,
+                                uint32_t msi_phandle, uint32_t *mpxy_mbox_phandle)
+{
+    char *name;
+    MachineState *mc = MACHINE(s);
+    uint32_t mbox_phandle = (*phandle)++;
+
+    name = g_strdup_printf("/soc/sbi-mpxy-mbox");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,sbi-mpxy-mbox");
+    qemu_fdt_setprop_cell(mc->fdt, name, "#mbox-cells", 2);
+    if (s->aia_type == VIRT_AIA_TYPE_APLIC_IMSIC) {
+        qemu_fdt_setprop_cell(mc->fdt, name, "msi-parent", msi_phandle);
+    }
+    qemu_fdt_setprop_cell(mc->fdt, name, "phandle", mbox_phandle);
+    *mpxy_mbox_phandle = mbox_phandle;
+    g_free(name);
+}
+
+static void create_fdt_sbi_mpxy_sysmsi(RISCVVirtState *s, uint32_t *phandle,
+                                       uint32_t msi_phandle, uint32_t mpxy_mbox_phandle)
+{
+    char *name;
+    MachineState *mc = MACHINE(s);
+    uint32_t sysmsi_phandle = (*phandle)++;
+
+    /* No point in creating system MSI node in absence of IMSIC */
+    if (s->aia_type != VIRT_AIA_TYPE_APLIC_IMSIC) {
+        return;
+    }
+
+    name = g_strdup_printf("/soc/rpmi-system-msi");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,rpmi-system-msi");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes", mpxy_mbox_phandle, 0x1000, 0x0);
+    qemu_fdt_setprop_cell(mc->fdt, name, "msi-parent", msi_phandle);
+    qemu_fdt_setprop(mc->fdt, name, "interrupt-controller", NULL, 0);
+    qemu_fdt_setprop_cell(mc->fdt, name, "#interrupt-cells", 1);
+    qemu_fdt_setprop_cell(mc->fdt, name, "phandle", sysmsi_phandle);
+    g_free(name);
+
+    name = g_strdup_printf("/soc/gpio-keys");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "gpio-keys");
+    g_free(name);
+
+    name = g_strdup_printf("/soc/gpio-keys/key-power");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "label", "Poweroff Request");
+    qemu_fdt_setprop_cell(mc->fdt, name, "linux,code", 116); /* KEY_POWER */
+    qemu_fdt_setprop_cells(mc->fdt, name, "interrupts-extended",
+                           sysmsi_phandle, RPMI_SYS_MSI_SHUTDOWN_INDEX);
+    g_free(name);
+
+    name = g_strdup_printf("/soc/gpio-keys/key-restart");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "label", "Restart Request");
+    qemu_fdt_setprop_cell(mc->fdt, name, "linux,code", 0x198); /* KEY_RESTART */
+    qemu_fdt_setprop_cells(mc->fdt, name, "interrupts-extended",
+                           sysmsi_phandle, RPMI_SYS_MSI_REBOOT_INDEX);
+    g_free(name);
+
+    name = g_strdup_printf("/soc/gpio-keys/key-suspend");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "label", "Suspend Request");
+    qemu_fdt_setprop_cell(mc->fdt, name, "linux,code", 205); /* KEY_SUSPEND */
+    qemu_fdt_setprop_cells(mc->fdt, name, "interrupts-extended",
+                           sysmsi_phandle, RPMI_SYS_MSI_SUSPEND_INDEX);
+    g_free(name);
+}
+
+static void create_fdt_sbi_mpxy_clk(RISCVVirtState *s, uint32_t mpxy_mbox_phandle)
+{
+    char *name;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/rpmi-clk");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,rpmi-clock");
+    qemu_fdt_setprop_cell(mc->fdt, name, "#clock-cells", 1);
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes", mpxy_mbox_phandle, 0x1001, 0x0);
+    g_free(name);
+}
+
+static void create_fdt_rpmi_sysmsi(RISCVVirtState *s, uint64_t shmem_base,
+                                   uint32_t rpmi_mbox_handle)
+{
+    char *name;
+    uint32_t sysmsi_servicegrp = 2;
+    MachineState *mc = MACHINE(s);
+
+    /* No point in creating system MSI node in absence of IMSIC */
+    if (s->aia_type != VIRT_AIA_TYPE_APLIC_IMSIC) {
+        return;
+    }
+
+    name = g_strdup_printf("/soc/mailbox@%lx/sysmsi@%lx",
+                           (long)shmem_base,
+                           (long)sysmsi_servicegrp);
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible",
+                            "riscv,rpmi-mpxy-system-msi");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
+                           rpmi_mbox_handle, sysmsi_servicegrp);
+    qemu_fdt_setprop_cell(mc->fdt,  name, "riscv,sbi-mpxy-channel-id", 0x1000);
+    g_free(name);
+}
+
+static void create_fdt_rpmi_clock(RISCVVirtState *s, uint64_t shmem_base,
+                                  uint32_t rpmi_mbox_handle)
+{
+    char *name;
+    uint32_t clock_servicegrp = 8;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/mailbox@%lx/clock@%lx",
+                           (long)shmem_base,
+                           (long)clock_servicegrp);
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible",
+                            "riscv,rpmi-mpxy-clock");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
+                           rpmi_mbox_handle, clock_servicegrp);
+    qemu_fdt_setprop_cell(mc->fdt,  name, "riscv,sbi-mpxy-channel-id", 0x1001);
+    g_free(name);
+}
+
 static void create_fdt_rpmi_nodes(RISCVVirtState *s, int xport_id,
                                   uint64_t shmem_base, uint64_t db_base,
-                                  uint32_t *phandle, uint32_t soc_xport_type,
-                                  uint32_t a2preq_qsz, uint32_t p2areq_qsz,
-                                  uint32_t dbsz)
+                                  uint32_t msi_phandle, uint32_t *phandle,
+                                  uint32_t soc_xport_type,
+                                  uint32_t a2preq_qsz, uint32_t p2areq_qsz, uint32_t dbsz)
 {
-    uint32_t rpmi_mbox_handle = 1;
+    uint32_t rpmi_mbox_handle = 1, mbox_phandle = 1;
 
     create_fdt_rpmi_mbox(s, shmem_base, db_base, phandle, &rpmi_mbox_handle,
                          a2preq_qsz, p2areq_qsz, dbsz);
@@ -1264,6 +1392,11 @@ static void create_fdt_rpmi_nodes(RISCVVirtState *s, int xport_id,
         /* SOC transport will have only reset and suspend*/
         create_fdt_rpmi_sysreset(s, shmem_base, rpmi_mbox_handle);
         create_fdt_rpmi_suspend(s, shmem_base, rpmi_mbox_handle);
+        create_fdt_rpmi_sysmsi(s, shmem_base, rpmi_mbox_handle);
+        create_fdt_rpmi_clock(s, shmem_base, rpmi_mbox_handle);
+        create_fdt_sbi_mbox(s, phandle, msi_phandle, &mbox_phandle);
+        create_fdt_sbi_mpxy_sysmsi(s, phandle, msi_phandle, mbox_phandle);
+        create_fdt_sbi_mpxy_clk(s, mbox_phandle);
     } else {
         /* Socket transport will have rest of the no system service groups */
         create_fdt_rpmi_hsm(s, shmem_base, rpmi_mbox_handle);
@@ -1371,7 +1504,8 @@ static void finalize_fdt(RISCVVirtState *s)
             }
 
             create_fdt_rpmi_nodes(s, i, shm_base, db_base,
-                                  &phandle, soc_xport_type,
+                                  msi_pcie_phandle, &phandle,
+                                  soc_xport_type,
                                   a2preq_qsz, p2areq_qsz,
                                   db_sz);
             riscv_rpmi_create(db_base, shm_base, shm_sz,
@@ -1661,6 +1795,11 @@ static void virt_build_smbios(RISCVVirtState *s)
         fw_cfg_add_file(s->fw_cfg, "etc/smbios/smbios-anchor",
                         smbios_anchor, smbios_anchor_len);
     }
+}
+
+static void virt_power_down(Notifier *notifier, void *data)
+{
+    riscv_rpmi_inject_sysmsi(RPMI_SYS_MSI_SHUTDOWN_INDEX);
 }
 
 static void virt_machine_done(Notifier *notifier, void *data)
@@ -1979,6 +2118,9 @@ static void virt_machine_init(MachineState *machine)
         sysbus_realize_and_unref(SYS_BUS_DEVICE(iommu_sys), &error_fatal);
     }
 
+    s->power_down.notify = virt_power_down;
+    qemu_register_powerdown_notifier(&s->power_down);
+
     s->machine_done.notify = virt_machine_done;
     qemu_add_machine_init_done_notifier(&s->machine_done);
 }
@@ -2099,6 +2241,26 @@ static void virt_set_rpmi(Object *obj, bool value, Error **errp)
     RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
 
     s->have_rpmi = value;
+}
+
+static char *virt_get_rpmi_sysmsi_inject(Object *obj, Error **errp)
+{
+    return g_strdup("none");
+}
+
+static void virt_set_rpmi_sysmsi_inject(Object *obj, const char *val, Error **errp)
+{
+    if (!strcmp(val, "shutdown")) {
+        riscv_rpmi_inject_sysmsi(RPMI_SYS_MSI_SHUTDOWN_INDEX);
+    } else if (!strcmp(val, "reboot")) {
+        riscv_rpmi_inject_sysmsi(RPMI_SYS_MSI_REBOOT_INDEX);
+    } else if (!strcmp(val, "suspend")) {
+        riscv_rpmi_inject_sysmsi(RPMI_SYS_MSI_SUSPEND_INDEX);
+    } else {
+        error_setg(errp, "Invalid RPMI system MSI injection type");
+        error_append_hint(errp, "Valid values are shutdown, reboot "
+                          "and suspend.\n");
+    }
 }
 
 bool virt_is_acpi_enabled(RISCVVirtState *s)
@@ -2235,6 +2397,15 @@ static void virt_machine_class_init(ObjectClass *oc, const void *data)
     object_class_property_set_description(oc, "rpmi",
                                           "Set on/off to enable/disable "
                                           "emulating RPMI devices");
+
+    object_class_property_add_str(oc, "rpmi-sysmsi-inject",
+                                  virt_get_rpmi_sysmsi_inject,
+                                  virt_set_rpmi_sysmsi_inject);
+    object_class_property_set_description(oc, "rpmi-sysmsi-inject",
+                                          "Set RPMI system MSI injection type."
+                                          "Valid values are shutdown, reboot, "
+                                          "and suspend.");
+
 }
 
 static const TypeInfo virt_machine_typeinfo = {
