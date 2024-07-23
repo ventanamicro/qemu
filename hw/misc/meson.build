@@ -36,6 +36,7 @@ specific_ss.add(when: 'CONFIG_RISCV_RPMI', if_true: files(
   'riscv_rpmi_sysreset.c',
   'riscv_rpmi_syssusp.c',
   'riscv_rpmi_hsm.c',
+  'riscv_rpmi_clock.c',
   'librpmi/lib/rpmi_context.c',
   'librpmi/lib/rpmi_transport.c',
   'librpmi/lib/rpmi_transport_shmem.c',
