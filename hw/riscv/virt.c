@@ -1139,6 +1139,8 @@ static void create_fdt_rpmi_mbox(RISCVVirtState *s,
     qemu_fdt_add_subnode(mc->fdt, name);
     qemu_fdt_setprop_cell(mc->fdt, name, "riscv,slot-size",
                           RPMI_QUEUE_SLOT_SIZE);
+    qemu_fdt_setprop_cell(mc->fdt, name, "riscv,p2a-doorbell-sysmsi-index",
+                          RPMI_SYS_MSI_P2A_DB_INDEX);
     qemu_fdt_setprop_cell(mc->fdt, name, "#mbox-cells", 1);
 
     if (p2areq_qsz) {
