@@ -39,12 +39,10 @@ DECLARE_INSTANCE_CHECKER(RiscvRpmiState, RISCV_RPMI,
 
 #define MAX_HARTS 64
 #define MAX_XPORTS2 16
-
-#define RPMI_QUEUE_SIZE 0x400
-#define RPMI_QUEUE_SLOT_SIZE 64
-#define RPMI_QUEUE_NUM_SLOTS ((RPMI_QUEUE_SIZE / RPMI_QUEUE_SLOT_SIZE) - 2)
-#define RPMI_DBREG_SIZE 0x400
 #define RPMI_NUM_QUEUES (4)
+
+#define RPMI_QUEUE_SLOT_SIZE 64
+#define RPMI_DBREG_SIZE (0x1000)
 #define RPMI_NUM_REGS (RPMI_NUM_QUEUES + 1)
 
 struct RiscvRpmiState {
@@ -52,7 +50,6 @@ struct RiscvRpmiState {
     SysBusDevice parent_obj;
 
     /*< public >*/
-    uint32_t id;
     QEMUTimer *fcm_poll_timer;
     MemoryRegion mmio;
     uint32_t doorbell;
@@ -67,7 +64,9 @@ struct RiscvRpmiState {
 
 DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
                                hwaddr fcm_addr, int fcm_sz,
-                               uint64_t harts_mask, uint32_t flags, void *clock_data);
-void fcm_checkpoint_notify(void *opaque);
+                               uint64_t harts_mask, uint32_t flags,
+                               MachineState *ms);
+
+void handle_rpmi_event(void);
 
 #endif

@@ -30,7 +30,17 @@ system_ss.add(when: 'CONFIG_MCHP_PFSOC_DMC', if_true: files('mchp_pfsoc_dmc.c'))
 system_ss.add(when: 'CONFIG_MCHP_PFSOC_IOSCB', if_true: files('mchp_pfsoc_ioscb.c'))
 system_ss.add(when: 'CONFIG_MCHP_PFSOC_SYSREG', if_true: files('mchp_pfsoc_sysreg.c'))
 system_ss.add(when: 'CONFIG_SIFIVE_TEST', if_true: files('sifive_test.c'))
-specific_ss.add(when: 'CONFIG_RISCV_RPMI', if_true: files('riscv_rpmi.c', 'riscv_rpmi_transport.c', 'riscv_rpmi_base.c', 'riscv_rpmi_cppc.c', 'riscv_rpmi_hsm.c', 'riscv_rpmi_reset.c', 'riscv_rpmi_suspend.c', 'riscv_rpmi_clock.c', 'riscv_rpmi_ras.c'))
+specific_ss.add(when: 'CONFIG_RISCV_RPMI', if_true: files(
+  'riscv_rpmi.c',
+  'riscv_rpmi_shmem.c',
+  'librpmi/lib/rpmi_context.c',
+  'librpmi/lib/rpmi_transport.c',
+  'librpmi/lib/rpmi_transport_shmem.c',
+  'librpmi/lib/rpmi_hsm.c',
+  'librpmi/lib/rpmi_service_group_clock.c',
+  'librpmi/lib/rpmi_service_group_hsm.c',
+  'librpmi/lib/rpmi_service_group_sysreset.c',
+  'librpmi/lib/rpmi_service_group_syssusp.c' ))
 
 system_ss.add(when: 'CONFIG_SIFIVE_E_PRCI', if_true: files('sifive_e_prci.c'))
 system_ss.add(when: 'CONFIG_SIFIVE_E_AON', if_true: files('sifive_e_aon.c'))

@@ -20,6 +20,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu/units.h"
+#include "qemu/log.h"
 #include "qemu/error-report.h"
 #include "qemu/guest-random.h"
 #include "qapi/error.h"
@@ -29,7 +30,6 @@
 #include "hw/qdev-properties.h"
 #include "hw/char/serial.h"
 #include "target/riscv/cpu.h"
-#include "hw/riscv/riscv_reri_hart_dev.h"
 #include "hw/core/sysbus-fdt.h"
 #include "target/riscv/pmu.h"
 #include "hw/riscv/riscv_hart.h"
@@ -57,11 +57,8 @@
 #include "hw/acpi/aml-build.h"
 #include "qapi/qapi-visit-common.h"
 #include "hw/virtio/virtio-iommu.h"
-#include "hw/misc/riscv_rpmi.h"
-#include "hw/misc/riscv_rpmi_transport.h"
-#include "hw/misc/rpmi_clock.h"
 #include "hw/acpi/generic_event_device.h"
-#include "hw/riscv/riscv_ras_agent.h"
+#include "hw/misc/riscv_rpmi.h"
 
 /* KVM AIA only supports APLIC MSI. APLIC Wired is always emulated by QEMU. */
 static bool virt_use_kvm_aia(RISCVVirtState *s)
@@ -82,18 +79,16 @@ static const MemMapEntry virt_memmap[] = {
     [VIRT_CLINT] =        {  0x2000000,       0x10000 },
     [VIRT_ACLINT_SSWI] =  {  0x2F00000,        0x4000 },
     [VIRT_PCIE_PIO] =     {  0x3000000,       0x10000 },
-    [VIRT_RERI_BANK_DRAM] =  {  0x4000000,    0x10000 },
-    [VIRT_RERI_BANK_HARTS] = {  0x4010000,    HARTS_ERR_BANK_SIZE(VIRT_CPUS_MAX) },
     [VIRT_PLATFORM_BUS] = {  0x5000000,     0x2000000 },
     [VIRT_ACPI_GED] =     {  0x7000000,           0x8 },
     [VIRT_PLIC] =         {  0xc000000, VIRT_PLIC_SIZE(VIRT_CPUS_MAX * 2) },
     [VIRT_APLIC_M] =      {  0xc000000, APLIC_SIZE(VIRT_CPUS_MAX) },
     [VIRT_APLIC_S] =      {  0xd000000, APLIC_SIZE(VIRT_CPUS_MAX) },
     [VIRT_UART0] =        { 0x10000000,         0x100 },
-    [VIRT_RPMI_SHMEM] =   { 0x10001000,        0x9000 },
-    [VIRT_RPMI_DOORBELL] = { 0x1000a000,        0x3000 },
-    [VIRT_RPMI_FCM] =     { 0x1000d000,        0x9000 },
-    [VIRT_VIRTIO] =       { 0x10017000,        0x1000 },
+    [VIRT_RPMI_SHMEM] =   { 0x10001000,        0x4000 },
+    [VIRT_RPMI_DOORBELL] = { 0x10005000,        0x1000 },
+    [VIRT_RPMI_FCM] =     { 0x10006000,        0x4000 },
+    [VIRT_VIRTIO] =       { 0x1000a000,        0x1000 },
     [VIRT_FW_CFG] =       { 0x10100000,          0x18 },
     [VIRT_FLASH] =        { 0x20000000,     0x4000000 },
     [VIRT_IMSIC_M] =      { 0x24000000, VIRT_IMSIC_MAX_SIZE },
@@ -101,18 +96,6 @@ static const MemMapEntry virt_memmap[] = {
     [VIRT_PCIE_ECAM] =    { 0x30000000,    0x10000000 },
     [VIRT_PCIE_MMIO] =    { 0x40000000,    0x40000000 },
     [VIRT_DRAM] =         { 0x80000000,           0x0 },
-};
-
-#define MAX_RAS_ERR_SOURCES		1
-#define APEI_MEM_SZ			0x80000UL
-
-/* FIXME: Currently only one HART is supported. */
-RasErrorSource ras_err_srcs[MAX_RAS_ERR_SOURCES] = {
-    {
-        .sse_vector = 1,
-        .as = virt_memmap[VIRT_RERI_BANK_HARTS].base,
-        .size = HARTS_ERR_BANK_SIZE(1),
-    },
 };
 
 /* PCIe high mmio is fixed for RV32 */
@@ -125,76 +108,6 @@ RasErrorSource ras_err_srcs[MAX_RAS_ERR_SOURCES] = {
 static MemMapEntry virt_high_pcie_memmap;
 
 #define VIRT_FLASH_SECTOR_SIZE (256 * KiB)
-
-struct rpmi_clk_rate uart_clk_data[] = {
-    /* rate 1 */
-    [0] = {.lo = 0x11111111, .hi = 0x22222222},
-    /* rate 2 */
-    [1] = {.lo = 0x33333333, .hi = 0x44444444},
-    /* rate 3 */
-    [2] = {.lo = 0x55555555, .hi = 0x66666666},
-    /* rate 4 */
-    [3] = {.lo = 0x77777777, .hi = 0x88888888},
-};
-
-struct rpmi_clk_rate pll_clk_data[] = {
-    /* rate 1 */
-    [0] = {.lo = 0x11111111, .hi = 0x22222222},
-    /* rate 2 */
-    [1] = {.lo = 0x33333333, .hi = 0x44444444},
-    /* rate 3 */
-    [2] = {.lo = 0x55555555, .hi = 0x66666666},
-    /* rate 4 */
-    [3] = {.lo = 0x77777777, .hi = 0x88888888},
-    /* rate 5 */
-    [4] = {.lo = 0x99999999, .hi = 0xaaaaaaaa},
-    /* rate 6 */
-    [5] = {.lo = 0xbbbbbbbb, .hi = 0xcccccccc},
-};
-
-struct rpmi_clk_rate gpu_clk_data[] = {
-    /* min */
-    [0] = {.lo = 0x11111111, .hi = 0x22222222},
-    /* max */
-    [1] = {.lo = 0xbbbbbbbb, .hi = 0xcccccccc},
-    /* step */
-    [2] = {.lo = 0x22222222, .hi = 0x22222222},
-};
-
-struct rpmi_clk rpmi_clk[]= {
-    [0] =
-        {
-            .num_rates = 4,
-            .type = RPMI_CLK_TYPE_DISCRETE,
-            .transition_latency_ms = 100,
-            .state = RPMI_CLK_STATE_ENABLED,
-            .current_rate = 0x4444444433333333,
-            .name = "uartclk",
-            .clk_data = uart_clk_data,
-        },
-    [1] =
-        {
-            .num_rates = 6,
-            .type = RPMI_CLK_TYPE_DISCRETE,
-            .transition_latency_ms = 200,
-            .state = RPMI_CLK_STATE_ENABLED,
-            .current_rate = 0x8888888877777777,
-            .name = "pllclk",
-            .clk_data = pll_clk_data,
-        },
-
-    [2] =
-        {
-            .num_rates = 6,
-            .type = RPMI_CLK_TYPE_LINEAR,
-            .transition_latency_ms = 300,
-            .state = RPMI_CLK_STATE_ENABLED,
-            .current_rate = 0x2222222211111111,
-            .name = "gpuclk",
-            .clk_data = gpu_clk_data,
-        },
-    [3] = { },
-};
 
 static PFlashCFI01 *virt_flash_create1(RISCVVirtState *s,
                                        const char *name,
@@ -1076,86 +989,6 @@ static void create_fdt_flash(RISCVVirtState *s, const MemMapEntry *memmap)
     qemu_fdt_setprop_cell(ms->fdt, name, "bank-width", 4);
 }
 
-static void create_fdt_reri_harts(RISCVVirtState *s, const MemMapEntry *memmap,
-                                  uint32_t *svec, uint32_t *sid)
-{
-    char *name;
-    MachineState *mc = MACHINE(s);
-    uint32_t sse_vector, src_id;
-    int socket_count;
-    int i, num_harts = 0;
-
-    socket_count = riscv_socket_count(mc);
-    for (i = 0; i < socket_count; i++) {
-	    num_harts += riscv_socket_hart_count(mc, i);
-    }
-
-    name = g_strdup_printf("/chosen/opensbi,config/ras-agent-0/harts@%lx",
-			   (long)memmap[VIRT_RERI_BANK_HARTS].base);
-    qemu_fdt_add_subnode(mc->fdt, name);
-    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,reri-harts");
-    qemu_fdt_setprop_sized_cells(mc->fdt, name, "reg",
-        2, memmap[VIRT_RERI_BANK_HARTS].base, 2, memmap[VIRT_RERI_BANK_HARTS].size);
-
-    sse_vector = ++(*svec);
-    src_id=++(*sid);
-    *svec += num_harts;
-    *sid += num_harts;
-    qemu_fdt_setprop_cell(mc->fdt, name, "sse-vector", sse_vector);
-    qemu_fdt_setprop_cell(mc->fdt, name, "max-harts", num_harts);
-    qemu_fdt_setprop_cell(mc->fdt, name, "source-id", src_id);
-    qemu_fdt_setprop_cell(mc->fdt, name, "notif-type", 1);
-
-    g_free(name);
-}
-
-static void create_fdt_reri_dram(RISCVVirtState *s, const MemMapEntry *memmap,
-                                 uint32_t *svec, uint32_t *sid)
-{
-    char *name;
-    MachineState *mc = MACHINE(s);
-    uint32_t sse_vector, src_id;
-
-    name = g_strdup_printf("/chosen/opensbi,config/ras-agent-0/dram@%lx",
-			   (long)memmap[VIRT_RERI_BANK_DRAM].base);
-    qemu_fdt_add_subnode(mc->fdt, name);
-    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,reri-dram");
-    qemu_fdt_setprop_sized_cells(mc->fdt, name, "reg",
-        2, memmap[VIRT_RERI_BANK_DRAM].base, 2, memmap[VIRT_RERI_BANK_DRAM].size);
-    sse_vector = ++(*svec);
-    src_id = ++(*sid);
-    qemu_fdt_setprop_cell(mc->fdt, name, "sse-vector", sse_vector);
-    qemu_fdt_setprop_cell(mc->fdt, name, "source-id", src_id);
-    qemu_fdt_setprop_cell(mc->fdt, name, "notif-type", 1);
-    g_free(name);
-}
-
-static void create_fdt_apei_res_mem(RISCVVirtState *s, const MemMapEntry *memmap,
-				    uint64_t base, uint64_t size,
-				    uint32_t *phandle, uint32_t *res_mem_handle)
-{
-    char *name;
-    MachineState *mc = MACHINE(s);
-
-    *res_mem_handle = (*phandle)++;
-
-    name = g_strdup_printf("/reserved-memory");
-    qemu_fdt_add_subnode(mc->fdt, name);
-    qemu_fdt_setprop_cell(mc->fdt, name, "#address-cells", 0x2);
-    qemu_fdt_setprop_cell(mc->fdt, name, "#size-cells", 0x2);
-    qemu_fdt_setprop(mc->fdt, name, "ranges", NULL, 0);
-    g_free(name);
-
-    name = g_strdup_printf("/reserved-memory/apei-ghes-reserved");
-    qemu_fdt_add_subnode(mc->fdt, name);
-    qemu_fdt_setprop_sized_cells(mc->fdt, name, "reg",
-        2, base, 2, size);
-    qemu_fdt_setprop_cells(mc->fdt, name, "phandle", *res_mem_handle);
-    qemu_fdt_setprop(mc->fdt, name, "no-map", NULL, 0);
-
-    g_free(name);
-}
-
 static void create_fdt_fw_cfg(RISCVVirtState *s, const MemMapEntry *memmap)
 {
     MachineState *ms = MACHINE(s);
@@ -1199,9 +1032,34 @@ static void create_fdt_virtio_iommu(RISCVVirtState *s, uint16_t bdf)
                            bdf + 1, iommu_phandle, bdf + 1, 0xffff - bdf);
 }
 
+static void create_fdt_iommu(RISCVVirtState *s, uint16_t bdf)
+{
+    const char comp[] = "riscv,pci-iommu";
+    void *fdt = MACHINE(s)->fdt;
+    uint32_t iommu_phandle;
+    g_autofree char *iommu_node = NULL;
+    g_autofree char *pci_node = NULL;
+
+    pci_node = g_strdup_printf("/soc/pci@%lx",
+                               (long) virt_memmap[VIRT_PCIE_ECAM].base);
+    iommu_node = g_strdup_printf("%s/iommu@%x", pci_node, bdf);
+    iommu_phandle = qemu_fdt_alloc_phandle(fdt);
+    qemu_fdt_add_subnode(fdt, iommu_node);
+
+    qemu_fdt_setprop(fdt, iommu_node, "compatible", comp, sizeof(comp));
+    qemu_fdt_setprop_cell(fdt, iommu_node, "#iommu-cells", 1);
+    qemu_fdt_setprop_cell(fdt, iommu_node, "phandle", iommu_phandle);
+    qemu_fdt_setprop_cells(fdt, iommu_node, "reg",
+                           bdf << 8, 0, 0, 0, 0);
+    qemu_fdt_setprop_cells(fdt, pci_node, "iommu-map",
+                           0, iommu_phandle, 0, bdf,
+                           bdf + 1, iommu_phandle, bdf + 1, 0xffff - bdf);
+}
+
 static void create_fdt_rpmi_mbox(RISCVVirtState *s,
                                  uint64_t shmem_base, uint64_t db_base,
-                                 uint32_t *phandle, uint32_t *rpmi_mbox_handle)
+                                 uint32_t *phandle, uint32_t *rpmi_mbox_handle,
+                                 uint32_t qsz)
 {
     char *name;
 
@@ -1212,9 +1070,9 @@ static void create_fdt_rpmi_mbox(RISCVVirtState *s,
     };
 
     a2p_req_base = shmem_base;
-    p2a_ack_base = shmem_base + RPMI_QUEUE_SIZE;
-    p2a_req_base = shmem_base + RPMI_QUEUE_SIZE * 2;
-    a2p_ack_base = shmem_base + RPMI_QUEUE_SIZE * 3;
+    p2a_ack_base = shmem_base + qsz;
+    p2a_req_base = shmem_base + qsz * 2;
+    a2p_ack_base = shmem_base + qsz * 3;
     *rpmi_mbox_handle = (*phandle)++;
     name = g_strdup_printf("/soc/mailbox@%llx", (long long)shmem_base);
     qemu_fdt_add_subnode(mc->fdt, name);
@@ -1226,15 +1084,15 @@ static void create_fdt_rpmi_mbox(RISCVVirtState *s,
     qemu_fdt_setprop_cells(mc->fdt,
             name, "reg",
             (uint32_t)(a2p_req_base >> 32), (uint32_t)a2p_req_base,
-            0x0, RPMI_QUEUE_SIZE,
+            0x0, qsz,
             (uint32_t)(p2a_ack_base >> 32), (uint32_t)p2a_ack_base,
-            0x0, RPMI_QUEUE_SIZE,
+            0x0, qsz,
             (uint32_t)(p2a_req_base >> 32), (uint32_t)p2a_req_base,
-            0x0, RPMI_QUEUE_SIZE,
+            0x0, qsz,
             (uint32_t)(a2p_ack_base >> 32), (uint32_t)a2p_ack_base,
-            0x0, RPMI_QUEUE_SIZE,
+            0x0, qsz,
             (uint32_t)(db_base >> 32), (uint32_t)db_base,
-            0x0, RPMI_DBREG_SIZE);
+            0x0, qsz);
 
     qemu_fdt_setprop_cells(mc->fdt, name, "phandle", *rpmi_mbox_handle);
     qemu_fdt_setprop_string(mc->fdt, name, "compatible",
@@ -1257,57 +1115,6 @@ static void create_fdt_rpmi_sysreset(RISCVVirtState *s, uint64_t shmem_base,
                             "riscv,rpmi-system-reset");
     qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
             rpmi_mbox_handle, sysreset_servicegrp);
-    g_free(name);
-}
-
-static void create_fdt_sbi_mbox(RISCVVirtState *s, uint32_t *phandle, uint32_t *mpxy_mbox_phandle)
-{
-    char *name;
-    MachineState *mc = MACHINE(s);
-    uint32_t mbox_phandle = (*phandle)++;
-
-    name = g_strdup_printf("/soc/sbi-mpxy-mbox");
-    qemu_fdt_add_subnode(mc->fdt, name);
-    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,sbi-mpxy-mbox");
-    qemu_fdt_setprop_cell(mc->fdt, name, "#mbox-cells", 1);
-    qemu_fdt_setprop_cell(mc->fdt, name, "phandle", mbox_phandle);
-    *mpxy_mbox_phandle = mbox_phandle;
-    g_free(name);
-}
-
-static void create_fdt_sbi_mpxy_clk(RISCVVirtState *s, uint32_t mpxy_mbox_phandle)
-{
-    char *name;
-    MachineState *mc = MACHINE(s);
-
-    name = g_strdup_printf("/soc/rpmi-clk");
-    qemu_fdt_add_subnode(mc->fdt, name);
-    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,rpmi-clock");
-    qemu_fdt_setprop_cell(mc->fdt, name, "#clock-cells", 1);
-    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes", mpxy_mbox_phandle, 0x1000);
-    g_free(name);
-}
-
-static void create_fdt_rpmi_clock(RISCVVirtState *s, uint64_t shmem_base,
-                                  uint32_t *phandle, uint32_t rpmi_mbox_handle,
-                                  uint32_t *rpmi_clock_handle)
-{
-    char *name;
-    uint32_t clock_servicegrp = 7;
-    *rpmi_clock_handle = (*phandle)++;
-    MachineState *mc = MACHINE(s);
-
-    name = g_strdup_printf("/soc/mailbox@%lx/clock@%lx",
-                           (long)shmem_base,
-                           (long)clock_servicegrp);
-    qemu_fdt_add_subnode(mc->fdt, name);
-    qemu_fdt_setprop_string(mc->fdt, name, "compatible",
-                            "riscv,rpmi-mpxy-clk");
-    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
-            rpmi_mbox_handle, clock_servicegrp);
-    qemu_fdt_setprop_cells(mc->fdt, name, "phandle", *rpmi_clock_handle);
-    qemu_fdt_setprop_cell(mc->fdt,  name, "riscv,sbi-mpxy-channel-id", 0x1000);
-    qemu_fdt_setprop_cell(mc->fdt,  name, "reg", clock_servicegrp);
     g_free(name);
 }
 
@@ -1364,107 +1171,24 @@ static void create_fdt_rpmi_cppc(RISCVVirtState *s, uint64_t shmem_base,
     g_free(name);
 }
 
-static void create_fdt_rpmi_ras(RISCVVirtState *s, uint64_t shmem_base,
-                                 uint32_t rpmi_mbox_handle)
-{
-    char *name;
-    uint32_t rpmi_ras_servicegrp = 6;
-    MachineState *mc = MACHINE(s);
-
-    name = g_strdup_printf("/soc/mailbox@%lx/ras@%lx",
-                           (long)shmem_base,
-                           (long)rpmi_ras_servicegrp);
-    qemu_fdt_add_subnode(mc->fdt, name);
-    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,rpmi-ras");
-    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
-                           rpmi_mbox_handle, rpmi_ras_servicegrp);
-    g_free(name);
-}
-
 static void create_fdt_rpmi_nodes(RISCVVirtState *s, int xport_id,
                                   uint64_t shmem_base, uint64_t db_base,
-                                  uint32_t *phandle)
+                                  uint32_t *phandle, uint32_t soc_xport_type,
+                                  uint32_t qsz)
 {
-    uint32_t rpmi_mbox_handle = 1, rpmi_clock_handle = 1, mbox_phandle = 1;
+    uint32_t rpmi_mbox_handle = 1;
 
-    create_fdt_rpmi_mbox(s, shmem_base, db_base, phandle, &rpmi_mbox_handle);
-    if (xport_id == 0) {
+    create_fdt_rpmi_mbox(s, shmem_base, db_base, phandle, &rpmi_mbox_handle,
+                         qsz);
+    if (soc_xport_type) {
         /* SOC transport will have only reset and suspend*/
         create_fdt_rpmi_sysreset(s, shmem_base, rpmi_mbox_handle);
         create_fdt_rpmi_suspend(s, shmem_base, rpmi_mbox_handle);
-        create_fdt_rpmi_clock(s, shmem_base, phandle, rpmi_mbox_handle, &rpmi_clock_handle);
-        create_fdt_sbi_mbox(s, phandle, &mbox_phandle);
-        create_fdt_sbi_mpxy_clk(s, mbox_phandle);
-        create_fdt_rpmi_ras(s, shmem_base, rpmi_mbox_handle);
     } else {
         /* Socket transport will have rest of the no system service groups */
         create_fdt_rpmi_hsm(s, shmem_base, rpmi_mbox_handle);
         create_fdt_rpmi_cppc(s, shmem_base, rpmi_mbox_handle);
     }
-}
-
-static void create_fdt_iommu(RISCVVirtState *s, uint16_t bdf)
-{
-    const char comp[] = "riscv,pci-iommu";
-    void *fdt = MACHINE(s)->fdt;
-    uint32_t iommu_phandle;
-    g_autofree char *iommu_node = NULL;
-    g_autofree char *pci_node = NULL;
-
-    pci_node = g_strdup_printf("/soc/pci@%lx",
-                               (long) virt_memmap[VIRT_PCIE_ECAM].base);
-    iommu_node = g_strdup_printf("%s/iommu@%x", pci_node, bdf);
-    iommu_phandle = qemu_fdt_alloc_phandle(fdt);
-    qemu_fdt_add_subnode(fdt, iommu_node);
-
-    qemu_fdt_setprop(fdt, iommu_node, "compatible", comp, sizeof(comp));
-    qemu_fdt_setprop_cell(fdt, iommu_node, "#iommu-cells", 1);
-    qemu_fdt_setprop_cell(fdt, iommu_node, "phandle", iommu_phandle);
-    qemu_fdt_setprop_cells(fdt, iommu_node, "reg",
-                           bdf << 8, 0, 0, 0, 0);
-    qemu_fdt_setprop_cells(fdt, pci_node, "iommu-map",
-                           0, iommu_phandle, 0, bdf,
-                           bdf + 1, iommu_phandle, bdf + 1, 0xffff - bdf);
-}
-
-static void create_fdt_reri_base_node(RISCVVirtState *s, uint32_t rm_handle)
-{
-    MachineState *ms = MACHINE(s);
-    char *name;
-
-    name = g_strdup_printf("/chosen/%s", "opensbi,config");
-    qemu_fdt_add_subnode(ms->fdt, name);
-    g_free(name);
-
-    name = g_strdup_printf("/chosen/opensbi,config/%s", "ras-agent-0");
-    qemu_fdt_add_subnode(ms->fdt, name);
-    qemu_fdt_setprop_string(ms->fdt, name, "compatible", "riscv,sbi-ras-agent");
-    qemu_fdt_setprop_cell(ms->fdt, name, "reserved-memory-handle", rm_handle);
-    g_free(name);
-
-    name = g_strdup_printf("/soc/%s", "sbi-ras-agent-mpxy-0");
-    qemu_fdt_add_subnode(ms->fdt, name);
-    qemu_fdt_setprop_string(ms->fdt, name, "compatible", "riscv,sbi-mpxy-ras-agent");
-    qemu_fdt_setprop_cell(ms->fdt, name, "riscv,sbi-mpxy-channel-id", 0x1001);
-    g_free(name);
-}
-
-static void create_reri_nodes(RISCVVirtState *s, uint32_t *phandle)
-{
-    MachineState *ms = MACHINE(s);
-    uint32_t reri_res_mem_phandle = 0, sse_vecs = 0, src_ids = 0;
-    uint64_t ghes_mem_addr;
-
-    ghes_mem_addr = riscv_compute_apei_addr(virt_memmap[VIRT_DRAM].base,
-                                            virt_memmap[VIRT_DRAM].size,
-                                            0, /* at the end of DRAM */
-                                            APEI_MEM_SZ, ms);
-
-    create_fdt_apei_res_mem(s, virt_memmap, ghes_mem_addr, APEI_MEM_SZ, phandle,
-                            &reri_res_mem_phandle);
-    create_fdt_reri_base_node(s, reri_res_mem_phandle);
-    create_fdt_reri_harts(s, virt_memmap, &sse_vecs, &src_ids);
-    create_fdt_reri_dram(s, virt_memmap, &sse_vecs, &src_ids);
 }
 
 static void finalize_fdt(RISCVVirtState *s)
@@ -1474,7 +1198,8 @@ static void finalize_fdt(RISCVVirtState *s)
     uint32_t irq_pcie_phandle = 1, irq_virtio_phandle = 1;
     int i, base_hartid = -1, hart_count = 0;
     int rpmi_xports = riscv_socket_count(ms) + 1;
-    uint64_t harts_mask;
+    uint64_t harts_mask, all_harts = 0;
+    bool soc_xport_type = 0;
 
     create_fdt_sockets(s, virt_memmap, &phandle, &irq_mmio_phandle,
                        &irq_pcie_phandle, &irq_virtio_phandle,
@@ -1496,47 +1221,47 @@ static void finalize_fdt(RISCVVirtState *s)
             uint64_t shm_base = s->memmap[VIRT_RPMI_SHMEM].base,
                      db_base = s->memmap[VIRT_RPMI_DOORBELL].base,
                      fcm_base = s->memmap[VIRT_RPMI_FCM].base;
-            uint32_t flags = 0;
 
-            if (i) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: i: %x\n ", __func__, i);
+
+            if (i == (rpmi_xports - 1)) {
+                harts_mask = all_harts;
+                soc_xport_type = true;
+            } else {
                 /*
                  * first RPMI transport is for SOC itself so, it wont
                  * have harts to manage, subsequently every socket
                  * will have a transport created for them.
                  */
-                base_hartid = riscv_socket_first_hartid(ms, i - 1);
+                base_hartid = riscv_socket_first_hartid(ms, i);
                 if (base_hartid < 0) {
-                    error_report("can't find hartid base for socket%d", i - 1);
+                    error_report("can't find hartid base for socket%d", i);
                     exit(1);
                 }
 
-                hart_count = riscv_socket_hart_count(ms, i - 1);
+                hart_count = riscv_socket_hart_count(ms, i);
                 if (hart_count < 0) {
-                    error_report("can't find hart count for socket%d", i - 1);
+                    error_report("can't find hart count for socket%d", i);
                     exit(1);
                 }
 
-                flags = 1 << RPMI_XPORT_TYPE_SOCKET;
                 harts_mask = MAKE_64BIT_MASK(base_hartid, hart_count);
-            } else {
-                flags = 1 << RPMI_XPORT_TYPE_SOC;
-                harts_mask = 0;
+                all_harts |= harts_mask;
+                soc_xport_type = false;
             }
 
             create_fdt_rpmi_nodes(s, i, shm_base + (shm_sz * i),
                                   db_base + (db_sz * i),
-                                  &phandle);
+                                  &phandle, soc_xport_type,
+                                  shm_sz / RPMI_NUM_QUEUES);
             riscv_rpmi_create(db_base + (db_sz * i),
                               shm_base + (shm_sz * i), shm_sz,
                               fcm_base + (fcm_sz * i), fcm_sz,
-                              harts_mask, flags, (void *)rpmi_clk);
+                              harts_mask, soc_xport_type, ms);
         }
     } else {
         create_fdt_reset(s, virt_memmap, &phandle);
-    }
-
-    if (s->have_reri) {
-        create_reri_nodes(s, &phandle);
     }
 }
 
@@ -1900,14 +1625,6 @@ static void virt_machine_done(Notifier *notifier, void *data)
                                          kernel_start_addr, true, NULL);
     }
 
-    if (s->have_reri) {
-        ghes_loc = riscv_compute_apei_addr(memmap[VIRT_DRAM].base,
-                                           memmap[VIRT_DRAM].size,
-                                           0, /* end of dram */
-                                           APEI_MEM_SZ,
-                                           machine);
-    }
-
     fdt_load_addr = riscv_compute_fdt_addr(memmap[VIRT_DRAM].base,
                                            memmap[VIRT_DRAM].size,
                                            ghes_loc, machine);
@@ -2103,20 +1820,6 @@ static void virt_machine_init(MachineState *machine)
         sifive_test_create(memmap[VIRT_TEST].base);
     }
 
-    if (s->have_reri) {
-        /* RERI HART device emulator */
-        riscv_create_harts_reri_dev(memmap[VIRT_RERI_BANK_HARTS].base);
-    }
-
-    if (s->have_ras) {
-        /*
-         * Location where EDK2 will patch the allocated base address
-         * of Error status and CPER records.
-         */
-        s->acpi_dev = create_acpi_ged(virt_memmap[VIRT_ACPI_GED].base);
-        riscv_ras_agent_init(&ras_err_srcs[0], MAX_RAS_ERR_SOURCES);
-    }
-
     /* VirtIO MMIO devices */
     for (i = 0; i < VIRTIO_COUNT; i++) {
         sysbus_create_simple("virtio-mmio",
@@ -2252,34 +1955,6 @@ static void virt_set_rpmi(Object *obj, bool value, Error **errp)
     s->have_rpmi = value;
 }
 
-static bool virt_get_ras(Object *obj, Error **errp)
-{
-    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
-
-    return s->have_ras;
-}
-
-static void virt_set_ras(Object *obj, bool value, Error **errp)
-{
-    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
-
-    s->have_ras = value;
-}
-
-static bool virt_get_reri(Object *obj, Error **errp)
-{
-    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
-
-    return s->have_reri;
-}
-
-static void virt_set_reri(Object *obj, bool value, Error **errp)
-{
-    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
-
-    s->have_reri = value;
-}
-
 bool virt_is_acpi_enabled(RISCVVirtState *s)
 {
     return s->acpi != ON_OFF_AUTO_OFF;
@@ -2401,16 +2076,6 @@ static void virt_machine_class_init(ObjectClass *oc, void *data)
     object_class_property_set_description(oc, "rpmi",
                                           "Set on/off to enable/disable "
                                           "emulating RPMI devices");
-    object_class_property_add_bool(oc, "reri", virt_get_reri,
-                                   virt_set_reri);
-    object_class_property_set_description(oc, "reri",
-                                          "Set on/off to enable/disable "
-                                          "RERI support");
-    object_class_property_add_bool(oc, "ras", virt_get_ras,
-                                   virt_set_ras);
-    object_class_property_set_description(oc, "ras",
-                                          "Set on/off to enable/disable "
-                                          "RERI/RAS support");
 }
 
 static const TypeInfo virt_machine_typeinfo = {

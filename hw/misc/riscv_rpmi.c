@@ -21,14 +21,50 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "qemu/log.h"
-#include "qemu/timer.h"
 #include "hw/misc/riscv_rpmi.h"
+#include "hw/boards.h"
 #include "exec/address-spaces.h"
 #include "hw/qdev-properties.h"
-#include "hw/misc/riscv_rpmi.h"
-#include "hw/misc/riscv_rpmi_transport.h"
+#include "sysemu/runstate.h"
+#include "librpmi/include/librpmi.h"
 
-static int num_xports;
+#define VENTANA_VENDOR_ID 0x1337
+#define VENTANA_VENDOR_SUB_ID 0xCAFE
+
+struct hw_info {
+    uint32_t status;
+    uint32_t vendor_id;
+    uint32_t hw_id_len;
+    uint32_t hw_id[4];
+} hw_info;
+
+int g_contexts;
+#define MAX_RPMI_XPORTS 16
+struct rpmi_context *rpmi_contexts[MAX_RPMI_XPORTS];
+
+int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz, uint64_t harts_mask,
+                         uint32_t soc_xport_type);
+struct rpmi_shmem *rpmi_shmem_qemu_create(const char *name, rpmi_uint64_t base,
+                                            rpmi_uint32_t size);
+
+void handle_rpmi_event(void)
+{
+    int i;
+
+    for (i = 0; i < g_contexts; i++) {
+        struct rpmi_context *rpmi_context = rpmi_contexts[i];
+        if (rpmi_context) {
+            rpmi_context_process_a2p_request(rpmi_context);
+            rpmi_context_process_all_events(rpmi_context);
+        } else {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: Doorbell event, but context not initialized!\n",
+                          __func__);
+        }
+    }
+
+    return;
+}
 
 static uint64_t riscv_rpmi_read(void *opaque, hwaddr offset, unsigned int size)
 {
@@ -59,24 +95,11 @@ static void riscv_rpmi_write(void *opaque, hwaddr offset,
 
     s->doorbell = val64;
     if (val64 == 1) {
-        handle_rpmi_shm(s->id);
+        handle_rpmi_event();
 
         /* clear the doorbell register */
         s->doorbell = 0;
     }
-}
-
-void fcm_checkpoint_notify(void *opaque)
-{
-    struct RiscvRpmiState *s = opaque;
-    uint32_t xport;
-
-    for (xport = 0; xport < num_xports; xport++) {
-        handle_rpmi_fcm(xport);
-    }
-
-    timer_mod(s->fcm_poll_timer,
-              qemu_clock_get_us(QEMU_CLOCK_HOST) + FCM_CHECK_TIME);
 }
 
 static const MemoryRegionOps riscv_rpmi_ops = {
@@ -99,15 +122,10 @@ static const MemoryRegionOps riscv_rpmi_ops = {
  {
      RiscvRpmiState *rpmi = RISCV_RISCV_RPMI(dev);
 
-     rpmi->id = num_xports;
-
      memory_region_init_io(&rpmi->mmio, OBJECT(dev), &riscv_rpmi_ops, rpmi,
                            TYPE_RISCV_RPMI, RPMI_DBREG_SIZE);
      sysbus_init_mmio(SYS_BUS_DEVICE(dev), &rpmi->mmio);
-     rpmi->fcm_poll_timer =  timer_new_us(QEMU_CLOCK_HOST,
-                                       fcm_checkpoint_notify, rpmi);
-     timer_mod(rpmi->fcm_poll_timer,
-               qemu_clock_get_us(QEMU_CLOCK_HOST) + FCM_CHECK_TIME);
+
  }
 
 static void riscv_rpmi_class_init(ObjectClass *klass, void *data)
@@ -125,55 +143,98 @@ static const TypeInfo riscv_rpmi_info = {
     .class_init    = riscv_rpmi_class_init,
 };
 
- /*
-  * Create RPMI devices.
-  */
- DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
-                                hwaddr fcm_addr, int fcm_sz,
-                                uint64_t harts_mask, uint32_t flags, void *clock_data)
- {
-     DeviceState *dev = qdev_new(TYPE_RISCV_RPMI);
-     MemoryRegion *address_space_mem = get_system_memory();
-     MemoryRegion *shm_mr = g_new0(MemoryRegion, 1);
-     MemoryRegion *fcm_mr = g_new0(MemoryRegion, 1);
-     uint32_t socket_num;
-     char name[32];
+int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz, uint64_t harts_mask,
+                         uint32_t soc_xport_type)
+{
+    char name[32];
+    struct rpmi_shmem *rpmi_shmem;
+    struct rpmi_transport *rpmi_transport_shmem;
+    struct rpmi_context *rctx;
 
-     assert(!(db_addr & 0x3));
-     assert(!(shm_addr & 0x3));
-     assert(!(fcm_addr & 0x3));
+    rpmi_shmem = rpmi_shmem_qemu_create("rpmi_shmem", shm_addr, shm_sz);
+    if (!rpmi_shmem) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: rpmi_shmem_qemu_create failed\n ", __func__);
+        return -1;
+    }
 
-     qdev_prop_set_uint64(dev, "harts-mask", harts_mask);
-     qdev_prop_set_uint32(dev, "flags", flags ? true : false);
-     sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
-     sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, db_addr);
+    rpmi_transport_shmem = rpmi_transport_shmem_create("rpmi_transport_shmem",
+                                                       RPMI_QUEUE_SLOT_SIZE,
+                                                       rpmi_shmem);
+    if (!rpmi_transport_shmem) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: transport_shmem_create failed, slot_sz: %d, shm: %p\n",
+                      __func__, RPMI_SLOT_SIZE_MIN, rpmi_shmem);
+        return -1;
+    }
 
-     sprintf(name, "shm@%lx", shm_addr);
-     memory_region_init_ram(shm_mr, OBJECT(dev), name,
-                            shm_sz, &error_fatal);
-     memory_region_add_subregion(address_space_mem,
-                                 shm_addr, shm_mr);
+    sprintf(name, "rpmi_context_%02d", g_contexts);
+    rctx = rpmi_context_create(name,
+                               rpmi_transport_shmem,
+                               RPMI_SRVGRP_ID_MAX_COUNT,
+                               VENTANA_VENDOR_ID,
+                               VENTANA_VENDOR_SUB_ID,
+                               sizeof(hw_info),
+                               (const rpmi_uint8_t *)&hw_info);
+    if (!rctx) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: rpmi_context_create failed\n ", __func__);
+        return -1;
+    } else {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: rpmi_context created: %p\n",
+                      __func__, rctx);
+    }
 
-     sprintf(name, "fcm@%lx", fcm_addr);
-     memory_region_init_ram(fcm_mr, OBJECT(dev), name,
-                            fcm_sz, &error_fatal);
-     memory_region_add_subregion(address_space_mem,
-                                 fcm_addr, fcm_mr);
+    /* save the context */
+    rpmi_contexts[g_contexts] = rctx;
+    g_contexts++;
 
-     if (flags & (1 << RPMI_XPORT_TYPE_SOC)) {
-         /* first transport is for SOC and doesnt have any harts */
-         socket_num = -1;
-     } else {
-         socket_num = num_xports - 1;
-     }
+    return 0;
+}
 
-     rpmi_init_transport(num_xports, shm_addr, db_addr, fcm_addr, socket_num,
-                         harts_mask, clock_data);
+/*
+ * Create RPMI devices.
+ */
+DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
+                               hwaddr fcm_addr, int fcm_sz,
+                               uint64_t harts_mask, uint32_t flags,
+                               MachineState *ms)
+{
+    DeviceState *dev = qdev_new(TYPE_RISCV_RPMI);
+    MemoryRegion *address_space_mem = get_system_memory();
+    MemoryRegion *shm_mr = g_new0(MemoryRegion, 1);
+    MemoryRegion *fcm_mr = g_new0(MemoryRegion, 1);
+    char name[32];
 
-     num_xports++;
+    assert(!(db_addr & 0x3));
+    assert(!(shm_addr & 0x3));
+    assert(!(fcm_addr & 0x3));
 
-     return dev;
- }
+    qdev_prop_set_uint64(dev, "harts-mask", harts_mask);
+    qdev_prop_set_uint32(dev, "flags", flags ? true : false);
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, db_addr);
+
+    sprintf(name, "shm@%lx", shm_addr);
+    memory_region_init_alias(shm_mr, OBJECT(dev),
+                             name, ms->ram, shm_addr,
+                             shm_sz);
+    memory_region_add_subregion(address_space_mem,
+                                shm_addr, shm_mr);
+
+    sprintf(name, "fcm@%lx", fcm_addr);
+    memory_region_init_ram(fcm_mr, OBJECT(dev), name,
+                           fcm_sz, &error_fatal);
+    memory_region_add_subregion(address_space_mem,
+                                fcm_addr, fcm_mr);
+
+    if (!init_rpmi_svc_groups(shm_addr, shm_sz, harts_mask, flags)) {
+        return NULL;
+    }
+
+    return dev;
+}
 
 static void riscv_rpmi_register_types(void)
 {
