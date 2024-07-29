@@ -38,6 +38,12 @@ struct rpmi_context *rpmi_contexts[MAX_RPMI_XPORTS];
 int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
                          uint32_t a2preq_qsz, uint32_t p2areq_qsz,
                          uint64_t harts_mask, uint32_t soc_xport_type);
+void add_sysmsi_group(struct rpmi_context *rctx);
+void add_sysreset_group(struct rpmi_context *rctx);
+int add_hsm_group(struct rpmi_context *rctx, uint64_t harts_mask,
+                  uint32_t soc_xport_type);
+void add_syssusp_group(struct rpmi_context *rctx, void *rpmi_hsm);
+void *get_soc_hsm_context(void);
 struct rpmi_shmem *rpmi_shmem_qemu_create(const char *name, rpmi_uint64_t base,
                                             rpmi_uint32_t size);
 
@@ -210,6 +216,19 @@ int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
         qemu_log_mask(LOG_GUEST_ERROR,
                       "%s: rpmi_context created: %p\n",
                       __func__, rctx);
+    }
+    /* create HSM group */
+    add_hsm_group(rctx, harts_mask, soc_xport_type);
+
+    if (soc_xport_type) {
+        /* create sysmsi group */
+        add_sysmsi_group(rctx);
+
+        /* create sysreset group */
+        add_sysreset_group(rctx);
+
+        /* create sysreset group */
+        add_syssusp_group(rctx, get_soc_hsm_context());
     }
 
     /* save the context */
