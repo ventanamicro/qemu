@@ -37,6 +37,10 @@ system_ss.add(when: 'CONFIG_SIFIVE_U_PRCI', if_true: files('sifive_u_prci.c'))
 specific_ss.add(when: 'CONFIG_RISCV_RPMI', if_true: files(
   'riscv_rpmi.c',
   'riscv_rpmi_env.c',
+  'riscv_rpmi_hsm.c',
+  'riscv_rpmi_sysmsi.c',
+  'riscv_rpmi_sysreset.c',
+  'riscv_rpmi_syssusp.c',
   'librpmi/lib/rpmi_context.c',
   'librpmi/lib/rpmi_hsm.c',
   'librpmi/lib/rpmi_service_group_clock.c',

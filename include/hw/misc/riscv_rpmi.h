@@ -46,6 +46,12 @@ DECLARE_INSTANCE_CHECKER(RiscvRpmiState, RISCV_RPMI,
 #define RPMI_ALL_NUM_REGS (RPMI_ALL_NUM_QUEUES + 1)
 #define RPMI_A2P_NUM_REGS (RPMI_A2P_NUM_QUEUES + 1)
 
+#define RPMI_SYS_MSI_SHUTDOWN_INDEX 0
+#define RPMI_SYS_MSI_REBOOT_INDEX 1
+#define RPMI_SYS_MSI_SUSPEND_INDEX 2
+#define RPMI_SYS_MSI_P2A_DB_INDEX 3
+#define RPMI_SYS_NUM_MSI 4
+
 struct RiscvRpmiState {
     /*< private >*/
     SysBusDevice parent_obj;
@@ -62,6 +68,8 @@ struct RiscvRpmiState {
  enum {
      RISCV_RPMI_MAX_HARTS             = 4095,
  };
+
+void riscv_rpmi_inject_sysmsi(uint32_t sys_msi_index);
 
 DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
                                uint32_t a2preq_qsz, uint32_t p2areq_qsz,
