@@ -497,6 +497,8 @@ struct CPUArchState {
     hwaddr kernel_addr;
     hwaddr fdt_addr;
 
+    bool (*wfi_cb)(void *);
+
 #ifdef CONFIG_KVM
     /* kvm timer */
     bool kvm_timer_dirty;
@@ -586,6 +588,11 @@ struct RISCVCPUClass {
 static inline int riscv_has_ext(CPURISCVState *env, uint32_t ext)
 {
     return (env->misa_ext & ext) != 0;
+}
+
+static inline void riscv_set_wfi_cb(CPURISCVState *env, void *cb)
+{
+    env->wfi_cb = cb ;
 }
 
 #include "cpu_user.h"
