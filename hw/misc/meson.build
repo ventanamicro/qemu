@@ -34,6 +34,19 @@ system_ss.add(when: 'CONFIG_SIFIVE_E_PRCI', if_true: files('sifive_e_prci.c'))
 system_ss.add(when: 'CONFIG_SIFIVE_E_AON', if_true: files('sifive_e_aon.c'))
 system_ss.add(when: 'CONFIG_SIFIVE_U_OTP', if_true: files('sifive_u_otp.c'))
 system_ss.add(when: 'CONFIG_SIFIVE_U_PRCI', if_true: files('sifive_u_prci.c'))
+specific_ss.add(when: 'CONFIG_RISCV_RPMI', if_true: files(
+  'riscv_rpmi_env.c',
+  'librpmi/lib/rpmi_context.c',
+  'librpmi/lib/rpmi_hsm.c',
+  'librpmi/lib/rpmi_service_group_clock.c',
+  'librpmi/lib/rpmi_service_group_cppc.c',
+  'librpmi/lib/rpmi_service_group_hsm.c',
+  'librpmi/lib/rpmi_service_group_sysmsi.c',
+  'librpmi/lib/rpmi_service_group_sysreset.c',
+  'librpmi/lib/rpmi_service_group_syssusp.c',
+  'librpmi/lib/rpmi_shmem.c',
+  'librpmi/lib/rpmi_transport.c',
+  'librpmi/lib/rpmi_transport_shmem.c'))
 
 subdir('macio')
 
