@@ -4292,6 +4292,10 @@ foreach target : target_dirs
     arch_srcs += t.sources()
     arch_deps += t.dependencies()
 
+    if target_name == 'riscv64' or target_name == 'riscv32'
+        target_inc += include_directories('hw/misc/librpmi/include')
+    endif
+
     hw_dir = target_name == 'sparc64' ? 'sparc64' : target_base_arch
     if hw_arch.has_key(hw_dir)
       hw = hw_arch[hw_dir].apply(config_target, strict: false)
