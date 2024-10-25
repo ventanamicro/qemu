@@ -38,11 +38,13 @@ DECLARE_INSTANCE_CHECKER(RiscvRpmiState, RISCV_RPMI,
 
 #define MAX_HARTS 64
 #define MAX_XPORTS2 16
-#define RPMI_NUM_QUEUES (4)
+#define RPMI_ALL_NUM_QUEUES (4)
+#define RPMI_A2P_NUM_QUEUES (2)
 
 #define RPMI_QUEUE_SLOT_SIZE 64
 #define RPMI_DBREG_SIZE (0x1000)
-#define RPMI_NUM_REGS (RPMI_NUM_QUEUES + 1)
+#define RPMI_ALL_NUM_REGS (RPMI_ALL_NUM_QUEUES + 1)
+#define RPMI_A2P_NUM_REGS (RPMI_A2P_NUM_QUEUES + 1)
 
 struct RiscvRpmiState {
     /*< private >*/
@@ -62,6 +64,8 @@ struct RiscvRpmiState {
  };
 
 DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
+                               uint32_t a2preq_qsz,
+                               uint32_t p2areq_qsz,
                                hwaddr fcm_addr, int fcm_sz,
                                uint64_t harts_mask, uint32_t flags,
                                MachineState *ms);

@@ -43,6 +43,7 @@ int g_contexts;
 struct rpmi_context *rpmi_contexts[MAX_RPMI_XPORTS];
 
 int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
+                         uint32_t a2preq_qsz, uint32_t p2areq_qsz,
                          hwaddr fcm_addr, int fcm_sz,
                          uint64_t harts_mask, uint32_t soc_xport_type);
 void add_sysreset_group(struct rpmi_context *rctx);
@@ -186,6 +187,7 @@ struct rpmi_shmem_platform_ops rpmi_shmem_qemu_ops = {
 };
 
 int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
+                         uint32_t a2preq_qsz, uint32_t p2areq_qsz,
                          hwaddr fcm_addr, int fcm_sz,
                          uint64_t harts_mask, uint32_t soc_xport_type)
 {
@@ -205,6 +207,8 @@ int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
 
     rpmi_transport_shmem = rpmi_transport_shmem_create("rpmi_transport_shmem",
                                                        RPMI_QUEUE_SLOT_SIZE,
+                                                       a2preq_qsz,
+                                                       p2areq_qsz,
                                                        rpmi_shmem);
     if (!rpmi_transport_shmem) {
         qemu_log_mask(LOG_GUEST_ERROR,
@@ -272,6 +276,8 @@ int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
  * Create RPMI devices.
  */
 DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
+                               uint32_t a2preq_qsz,
+                               uint32_t p2areq_qsz,
                                hwaddr fcm_addr, int fcm_sz,
                                uint64_t harts_mask, uint32_t flags,
                                MachineState *ms)
@@ -305,7 +311,10 @@ DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
                                     fcm_addr, fcm_mr);
     }
 
-    if (!init_rpmi_svc_groups(shm_addr, shm_sz, fcm_addr, fcm_sz, harts_mask, flags)) {
+    if (!init_rpmi_svc_groups(shm_addr, shm_sz,
+                              a2preq_qsz, p2areq_qsz,
+                              fcm_addr, fcm_sz,
+                              harts_mask, flags)) {
         return NULL;
     }
 

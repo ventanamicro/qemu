@@ -117,6 +117,9 @@ static MemMapEntry virt_high_pcie_memmap;
 
 #define VIRT_FLASH_SECTOR_SIZE (256 * KiB)
 
+#define VIRT_RPMI_A2PREQ_QUEUE_SIZE (16 * RPMI_QUEUE_SLOT_SIZE)
+#define VIRT_RPMI_P2AREQ_QUEUE_SIZE 0 //(16 * RPMI_QUEUE_SLOT_SIZE)
+
 static PFlashCFI01 *virt_flash_create1(RISCVVirtState *s,
                                        const char *name,
                                        const char *alias_prop_name)
@@ -1253,40 +1256,61 @@ static void create_fdt_iommu(RISCVVirtState *s, uint16_t bdf)
 static void create_fdt_rpmi_mbox(RISCVVirtState *s,
                                  uint64_t shmem_base, uint64_t db_base,
                                  uint32_t *phandle, uint32_t *rpmi_mbox_handle,
-                                 uint32_t qsz, uint32_t dbsz)
+                                 uint32_t a2preq_qsz, uint32_t p2areq_qsz, uint32_t dbsz)
 {
     char *name;
 
     MachineState *mc = MACHINE(s);
-    uint64_t a2p_req_base, p2a_ack_base, p2a_req_base, a2p_ack_base;
-    static const char *const regnames[RPMI_NUM_REGS] = {
+    uint64_t a2p_req_base, p2a_ack_base, p2a_req_base = 0, a2p_ack_base = 0;
+    static const char *const regnames_all[RPMI_ALL_NUM_REGS] = {
         "a2p-req", "p2a-ack", "p2a-req", "a2p-ack", "db-reg"
     };
 
+    static const char *const regnames_a2p[RPMI_A2P_NUM_REGS] = {
+        "a2p-req", "p2a-ack", "db-reg"
+    };
+
     a2p_req_base = shmem_base;
-    p2a_ack_base = shmem_base + qsz;
-    p2a_req_base = shmem_base + qsz * 2;
-    a2p_ack_base = shmem_base + qsz * 3;
+    p2a_ack_base = a2p_req_base + a2preq_qsz;
+    p2a_req_base = p2a_ack_base + a2preq_qsz;
+    a2p_ack_base = p2a_req_base + p2areq_qsz;
+
     *rpmi_mbox_handle = (*phandle)++;
     name = g_strdup_printf("/soc/mailbox@%llx", (long long)shmem_base);
     qemu_fdt_add_subnode(mc->fdt, name);
     qemu_fdt_setprop_cell(mc->fdt, name, "riscv,slot-size",
                           RPMI_QUEUE_SLOT_SIZE);
     qemu_fdt_setprop_cell(mc->fdt, name, "#mbox-cells", 1);
-    qemu_fdt_setprop_string_array(mc->fdt, name, "reg-names",
-                                  (char **)&regnames, ARRAY_SIZE(regnames));
-    qemu_fdt_setprop_cells(mc->fdt,
+
+    if (p2areq_qsz) {
+        qemu_fdt_setprop_string_array(mc->fdt, name, "reg-names",
+                                  (char **)&regnames_all, ARRAY_SIZE(regnames_all));
+
+        qemu_fdt_setprop_cells(mc->fdt,
             name, "reg",
             (uint32_t)(a2p_req_base >> 32), (uint32_t)a2p_req_base,
-            0x0, qsz,
+            0x0, a2preq_qsz,
             (uint32_t)(p2a_ack_base >> 32), (uint32_t)p2a_ack_base,
-            0x0, qsz,
+            0x0, a2preq_qsz,
             (uint32_t)(p2a_req_base >> 32), (uint32_t)p2a_req_base,
-            0x0, qsz,
+            0x0, p2areq_qsz,
             (uint32_t)(a2p_ack_base >> 32), (uint32_t)a2p_ack_base,
-            0x0, qsz,
+            0x0, p2areq_qsz,
             (uint32_t)(db_base >> 32), (uint32_t)db_base,
             0x0, dbsz);
+    }
+    else {
+        qemu_fdt_setprop_string_array(mc->fdt, name, "reg-names",
+                                  (char **)&regnames_a2p, ARRAY_SIZE(regnames_a2p));
+        qemu_fdt_setprop_cells(mc->fdt,
+            name, "reg",
+            (uint32_t)(a2p_req_base >> 32), (uint32_t)a2p_req_base,
+            0x0, a2preq_qsz,
+            (uint32_t)(p2a_ack_base >> 32), (uint32_t)p2a_ack_base,
+            0x0, a2preq_qsz,
+            (uint32_t)(db_base >> 32), (uint32_t)db_base,
+            0x0, dbsz);
+    }
 
     qemu_fdt_setprop_cells(mc->fdt, name, "phandle", *rpmi_mbox_handle);
     qemu_fdt_setprop_string(mc->fdt, name, "compatible",
@@ -1419,12 +1443,13 @@ static void create_fdt_rpmi_clock(RISCVVirtState *s, uint64_t shmem_base,
 static void create_fdt_rpmi_nodes(RISCVVirtState *s, int xport_id,
                                   uint64_t shmem_base, uint64_t db_base,
                                   uint32_t *phandle, uint32_t soc_xport_type,
-                                  uint32_t qsz, uint32_t dbsz)
+                                  uint32_t a2preq_qsz, uint32_t p2areq_qsz,
+                                  uint32_t dbsz)
 {
     uint32_t rpmi_mbox_handle = 1, rpmi_clock_handle = 1, mbox_phandle = 1;
 
     create_fdt_rpmi_mbox(s, shmem_base, db_base, phandle, &rpmi_mbox_handle,
-                         qsz, dbsz);
+                         a2preq_qsz, p2areq_qsz, dbsz);
     if (soc_xport_type) {
         /* SOC transport will have only reset and suspend*/
         create_fdt_rpmi_sysreset(s, shmem_base, rpmi_mbox_handle);
@@ -1445,6 +1470,7 @@ static void finalize_fdt(RISCVVirtState *s)
     uint32_t phandle = 1, irq_mmio_phandle = 1, msi_pcie_phandle = 1;
     uint32_t irq_pcie_phandle = 1, irq_virtio_phandle = 1;
     uint32_t iommu_sys_phandle = 1, *cpu_phandles;
+    uint32_t a2preq_qsz, p2areq_qsz;
     int i, base_hartid = -1, hart_count = 0;
     int rpmi_xports = riscv_socket_count(ms) + 1;
     bool soc_xport_type = 0;
@@ -1482,6 +1508,8 @@ static void finalize_fdt(RISCVVirtState *s)
                 soc_xport_type = true;
                 shm_base = s->memmap[VIRT_RPMI_SOC_SHMEM].base;
                 shm_sz = s->memmap[VIRT_RPMI_SOC_SHMEM].size;
+                a2preq_qsz = VIRT_RPMI_A2PREQ_QUEUE_SIZE;
+                p2areq_qsz = VIRT_RPMI_P2AREQ_QUEUE_SIZE;
                 db_base = s->memmap[VIRT_RPMI_SOC_DOORBELL].base;
                 db_sz = s->memmap[VIRT_RPMI_SOC_DOORBELL].size;
                 fcm_base = 0;
@@ -1508,6 +1536,8 @@ static void finalize_fdt(RISCVVirtState *s)
                 soc_xport_type = false;
                 shm_sz = s->memmap[VIRT_RPMI_SHMEM].size / BIT(imsic_num_bits(rpmi_xports - 1));
                 shm_base = s->memmap[VIRT_RPMI_SHMEM].base + i * shm_sz;
+                a2preq_qsz = VIRT_RPMI_A2PREQ_QUEUE_SIZE;
+                p2areq_qsz = VIRT_RPMI_P2AREQ_QUEUE_SIZE;
                 db_sz = s->memmap[VIRT_RPMI_DOORBELL].size / BIT(imsic_num_bits(rpmi_xports - 1));
                 db_base = s->memmap[VIRT_RPMI_DOORBELL].base + i * db_sz;
                 fcm_sz = s->memmap[VIRT_RPMI_FCM].size / BIT(imsic_num_bits(rpmi_xports - 1));
@@ -1516,8 +1546,11 @@ static void finalize_fdt(RISCVVirtState *s)
 
             create_fdt_rpmi_nodes(s, i, shm_base, db_base,
                                   &phandle, soc_xport_type,
-                                  shm_sz / RPMI_NUM_QUEUES, db_sz);
-            riscv_rpmi_create(db_base, shm_base, shm_sz, fcm_base, fcm_sz,
+                                  a2preq_qsz, p2areq_qsz,
+                                  db_sz);
+            riscv_rpmi_create(db_base, shm_base, shm_sz,
+                              a2preq_qsz, p2areq_qsz,
+                              fcm_base, fcm_sz,
                               harts_mask, soc_xport_type, ms);
         }
     } else {
