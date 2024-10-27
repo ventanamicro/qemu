@@ -107,10 +107,10 @@ enum rpmi_error platform_set_state(void *priv,
 {
 
     if (clk_id > RPMI_CLOCK_COUNT)
-        return RPMI_ERR_INVAL;
+        return RPMI_ERR_INVAL_PARAM;
 
     if (state >= RPMI_CLK_STATE_MAX_IDX)
-        return RPMI_ERR_INVAL;
+        return RPMI_ERR_INVAL_PARAM;
 
     platclks_ctx[clk_id].current_state = state;
 
@@ -123,10 +123,10 @@ enum rpmi_error platform_get_state_and_rate(void *priv,
                                             uint64_t *rate)
 {
     if (clk_id > RPMI_CLOCK_COUNT)
-        return RPMI_ERR_INVAL;
+        return RPMI_ERR_INVAL_PARAM;
 
     if (!state && !rate)
-        return RPMI_ERR_INVAL;
+        return RPMI_ERR_INVAL_PARAM;
 
     if (state)
         *state = platclks_ctx[clk_id].current_state;
@@ -166,7 +166,7 @@ enum rpmi_error platform_set_rate(void *priv,
                                   rpmi_uint64_t *new_rate)
 {
     if (clk_id > RPMI_CLOCK_COUNT)
-        return RPMI_ERR_INVAL;
+        return RPMI_ERR_INVAL_PARAM;
 
     if (!platform_rate_change_match(NULL, clk_id, rate))
         return RPMI_ERR_ALREADY;
@@ -182,7 +182,7 @@ enum rpmi_error platform_set_rate(void *priv,
             platclks_ctx[clk_id].current_rate = rate + 0x200;
             break;
         default:
-            return RPMI_ERR_INVAL;
+            return RPMI_ERR_INVAL_PARAM;
     };
 
     *new_rate = platclks_ctx[clk_id].current_rate;
