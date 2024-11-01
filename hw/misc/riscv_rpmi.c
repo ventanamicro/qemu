@@ -28,15 +28,8 @@
 #include "sysemu/runstate.h"
 #include "librpmi.h"
 
-#define VENTANA_VENDOR_ID 0x1337
-#define VENTANA_VENDOR_SUB_ID 0xCAFE
-
-struct hw_info {
-    uint32_t status;
-    uint32_t vendor_id;
-    uint32_t hw_id_len;
-    uint32_t hw_id[4];
-} hw_info;
+#define PLAT_INFO	"ventana veyron-v2 plat 1.0"
+#define PLAT_INFO_LEN	(sizeof(PLAT_INFO))
 
 int g_contexts;
 #define MAX_RPMI_XPORTS 16
@@ -221,10 +214,8 @@ int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
     rctx = rpmi_context_create(name,
                                rpmi_transport_shmem,
                                RPMI_SRVGRP_ID_MAX_COUNT,
-                               VENTANA_VENDOR_ID,
-                               VENTANA_VENDOR_SUB_ID,
-                               sizeof(hw_info),
-                               (const rpmi_uint8_t *)&hw_info);
+                               PLAT_INFO_LEN,
+                               PLAT_INFO);
     if (!rctx) {
         qemu_log_mask(LOG_GUEST_ERROR,
                       "%s: rpmi_context_create failed\n ", __func__);
