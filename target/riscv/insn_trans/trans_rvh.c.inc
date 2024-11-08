@@ -44,6 +44,14 @@ static bool do_hlv(DisasContext *ctx, arg_r2 *a,
     TCGv dest = dest_gpr(ctx, a->rd);
     TCGv addr = get_gpr(ctx, a->rs1, EXT_NONE);
 
+    bool is_hlvx = (func == gen_helper_hyp_hlvx_hu) ||
+                   (func == gen_helper_hyp_hlvx_wu);
+
+    /* Apply Zjpm pointer masking */
+    if (!is_hlvx) {
+        tcg_gen_sextract_tl(addr, addr, 0, ctx->addr_vxl);
+    }
+
     decode_save_opc(ctx, 0);
     func(dest, tcg_env, addr);
     gen_set_gpr(ctx, a->rd, dest);
@@ -55,6 +63,9 @@ static bool do_hsv(DisasContext *ctx, arg_r2_s *a,
 {
     TCGv addr = get_gpr(ctx, a->rs1, EXT_NONE);
     TCGv data = get_gpr(ctx, a->rs2, EXT_NONE);
+
+    /* Apply Zjpm pointer masking */
+    tcg_gen_sextract_tl(addr, addr, 0, ctx->addr_vxl);
 
     decode_save_opc(ctx, 0);
     func(tcg_env, addr, data);

@@ -104,6 +104,7 @@ typedef struct DisasContext {
     TCGv zero;
     /* actual address width */
     uint8_t addr_xl;
+    uint8_t addr_vxl;
     bool addr_signed;
     /* Ztso */
     bool ztso;
@@ -1239,10 +1240,13 @@ static void riscv_tr_init_disas_context(DisasContextBase *dcbase, CPUState *cs)
     ctx->cs = cs;
     if (get_xl(ctx) == MXL_RV32) {
         ctx->addr_xl = 32;
+        ctx->addr_vxl = 32;
         ctx->addr_signed = false;
     } else {
         int pm_pmm = FIELD_EX32(tb_flags, TB_FLAGS, PM_PMM);
         ctx->addr_xl = 64 - riscv_pm_get_pmlen(pm_pmm);
+        int pm_vpmm = FIELD_EX64(tb_flags, TB_FLAGS, PM_VPMM);
+        ctx->addr_vxl = 64 - riscv_pm_get_pmlen(pm_vpmm);
         ctx->addr_signed = FIELD_EX32(tb_flags, TB_FLAGS, PM_SIGNEXTEND);
     }
     ctx->ztso = cpu->cfg.ext_ztso;
