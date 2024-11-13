@@ -5,7 +5,7 @@
 #include "target/riscv/cpu.h"
 
 int add_hsm_group(struct rpmi_context *rctx, uint64_t harts_mask,
-                  uint32_t soc_xport_type);
+                  uint32_t soc_xport_type, struct rpmi_hsm **hsm_ctx);
 void *create_hsm_context(uint64_t harts_mask, void *ctx);
 int get_harts_count(uint64_t harts_mask, rpmi_uint32_t *hart_ids);
 enum rpmi_hart_hw_state hart_get_hw_state(void *priv, rpmi_uint32_t hart_index);
@@ -121,11 +121,11 @@ int get_harts_count(uint64_t harts_mask, rpmi_uint32_t *hart_ids)
 }
 
 int add_hsm_group(struct rpmi_context *rctx, uint64_t harts_mask,
-                  uint32_t soc_xport_type)
+                  uint32_t soc_xport_type, struct rpmi_hsm **hsm_ctx)
 {
     int harts_count = 0;
     struct rpmi_service_group *grp;
-
+    qemu_log_mask(LOG_GUEST_ERROR, "g_hsm_contextx value -%d\n", g_hsm_contexts);
     if (harts_mask) {
         harts_count = get_harts_count(harts_mask,
                             (rpmi_uint32_t *)&g_hart_ids[g_hsm_contexts]);
@@ -163,9 +163,13 @@ int add_hsm_group(struct rpmi_context *rctx, uint64_t harts_mask,
         if (soc_xport_type) {
             soc_hsm_cntx = hsm_cntx;
         } else {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: NON SOC HSM CONTEXT, cntx: %p, grp: %p\n ",
+                      __func__, hsm_cntx, grp);
             rpmi_hsms[g_hsm_contexts] = hsm_cntx;
             g_hsm_contexts++;
         }
+        *hsm_ctx = hsm_cntx;
     } else if (soc_xport_type) {
         /* non-leaf nodes */
         soc_hsm_cntx = rpmi_hsm_nonleaf_create(g_hsm_contexts,
@@ -188,6 +192,7 @@ void *get_soc_hsm_context(void)
     if (!soc_hsm_cntx) {
             qemu_log_mask(LOG_GUEST_ERROR,
                           "%s: SoC SoC hsm_context NULL error\n ", __func__);
+            return NULL;
     }
 
     return soc_hsm_cntx;
