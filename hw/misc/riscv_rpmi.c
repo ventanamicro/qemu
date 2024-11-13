@@ -47,7 +47,9 @@ int add_clock_group(struct rpmi_context *rctx);
 int add_cppc_group(struct rpmi_context *rctx,
                    struct rpmi_shmem *shmem,
                    struct rpmi_hsm *hsm,
-                   uint64_t harts_mask);
+                   uint64_t harts_mask,
+                   uint64_t perf_request_shmem_offset,
+                   uint64_t perf_feedback_shmem_offset);
 void *get_soc_hsm_context(void);
 struct rpmi_shmem *rpmi_shmem_qemu_create(const char *name, rpmi_uint64_t base,
                                             rpmi_uint32_t size);
@@ -242,7 +244,7 @@ int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
         rpmi_fastchan_shmem = NULL;
     }
 
-    add_cppc_group(rctx, rpmi_fastchan_shmem, hsm_ctx, harts_mask);
+    add_cppc_group(rctx, rpmi_fastchan_shmem, hsm_ctx, harts_mask, 0, fcm_sz/2);
 
     if (soc_xport_type) {
         /* create sysreset group */

@@ -16,10 +16,15 @@ enum rpmi_error cppc_set_reg(void *priv, rpmi_uint32_t hart_id,
 enum rpmi_error cppc_update_perf(void *priv, rpmi_uint32_t desired_perf,
                                  rpmi_uint32_t hart_index);
 
+enum rpmi_error cppc_get_current_freq(void *priv, rpmi_uint32_t hart_index,
+                                      rpmi_uint64_t *cur_freq);
+
 int add_cppc_group(struct rpmi_context *rctx,
                    struct rpmi_shmem *shmem,
                    struct rpmi_hsm *hsm,
-                   uint64_t harts_mask);
+                   uint64_t harts_mask,
+                   uint64_t perf_request_shmem_offset,
+			       uint64_t perf_feedback_shmem_offset);
 
 enum rpmi_error cppc_get_reg(void *priv, rpmi_uint32_t reg_id,
                              rpmi_uint32_t hart_id, rpmi_uint64_t *val)
@@ -56,16 +61,27 @@ enum rpmi_error cppc_update_perf(void *priv, rpmi_uint32_t desired_perf,
     return RPMI_SUCCESS;
 }
 
+enum rpmi_error cppc_get_current_freq(void *priv, rpmi_uint32_t hart_index, rpmi_uint64_t *cur_freq)
+{
+    /* dummy value */
+    *cur_freq = 0xdeadbeeffeedbead;
+    return 0;
+}
+
 struct rpmi_cppc_platform_ops ops = {
     .cppc_get_reg = cppc_get_reg,
     .cppc_set_reg = cppc_set_reg,
     .cppc_update_perf = cppc_update_perf,
+    .cppc_get_current_freq = cppc_get_current_freq,
 };
 
 int add_cppc_group(struct rpmi_context *rctx,
                    struct rpmi_shmem *shmem,
                    struct rpmi_hsm *hsm,
-                   uint64_t harts_mask)
+                   uint64_t harts_mask,
+                   uint64_t perf_request_shmem_offset,
+			       uint64_t perf_feedback_shmem_offset)
+
 {
     struct rpmi_cppc_regs cppc_regs;
 
@@ -89,6 +105,8 @@ int add_cppc_group(struct rpmi_context *rctx,
                                                     &cppc_regs,
                                                     RPMI_CPPC_PASSIVE_MODE,
                                                     shmem,
+                                                    perf_request_shmem_offset,
+                                                    perf_feedback_shmem_offset,
                                                     &ops,
                                                     NULL);
     if (!group) {
