@@ -37,13 +37,20 @@ struct rpmi_context *rpmi_contexts[MAX_RPMI_XPORTS];
 
 int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
                          uint32_t a2preq_qsz, uint32_t p2areq_qsz,
+                         hwaddr fcm_addr, int fcm_sz,
                          uint64_t harts_mask, uint32_t soc_xport_type);
 void add_sysmsi_group(struct rpmi_context *rctx);
 void add_sysreset_group(struct rpmi_context *rctx);
 int add_hsm_group(struct rpmi_context *rctx, uint64_t harts_mask,
-                  uint32_t soc_xport_type);
+                  uint32_t soc_xport_type, struct rpmi_hsm **hsm_ctx);
 void add_syssusp_group(struct rpmi_context *rctx, void *rpmi_hsm);
 int add_clock_group(struct rpmi_context *rctx);
+int add_cppc_group(struct rpmi_context *rctx,
+                   struct rpmi_shmem *shmem,
+                   struct rpmi_hsm *hsm,
+                   uint64_t harts_mask,
+                   uint64_t perf_request_shmem_offset,
+                   uint64_t perf_feedback_shmem_offset);
 void *get_soc_hsm_context(void);
 struct rpmi_shmem *rpmi_shmem_qemu_create(const char *name, rpmi_uint64_t base,
                                             rpmi_uint32_t size);
@@ -176,11 +183,13 @@ struct rpmi_shmem_platform_ops rpmi_shmem_qemu_ops = {
 
 int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
                          uint32_t a2preq_qsz, uint32_t p2areq_qsz,
+                         hwaddr fcm_addr, int fcm_sz,
                          uint64_t harts_mask, uint32_t soc_xport_type)
 {
     char name[32];
-    struct rpmi_shmem *rpmi_shmem;
+    struct rpmi_shmem *rpmi_shmem, *rpmi_fastchan_shmem;
     struct rpmi_transport *rpmi_transport_shmem;
+    struct rpmi_hsm *hsm_ctx = NULL;
     struct rpmi_context *rctx;
 
     rpmi_shmem = rpmi_shmem_create("rpmi_shmem", shm_addr, shm_sz,
@@ -219,7 +228,23 @@ int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
                       __func__, rctx);
     }
     /* create HSM group */
-    add_hsm_group(rctx, harts_mask, soc_xport_type);
+    add_hsm_group(rctx, harts_mask, soc_xport_type, &hsm_ctx);
+
+    if (harts_mask) {
+        rpmi_fastchan_shmem = rpmi_shmem_create("cppc_fastchan_shmem",
+                                                fcm_addr, fcm_sz,
+                                                &rpmi_shmem_qemu_ops, NULL);
+        if (!rpmi_fastchan_shmem) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: rpmi_shmem_qemu_create failed for cppc fastchan\n ",
+                          __func__);
+            return -1;
+        }
+    } else {
+        rpmi_fastchan_shmem = NULL;
+    }
+
+    add_cppc_group(rctx, rpmi_fastchan_shmem, hsm_ctx, harts_mask, 0, fcm_sz/2);
 
     if (soc_xport_type) {
         /* create sysmsi group */
@@ -282,6 +307,7 @@ DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
 
     if (!init_rpmi_svc_groups(shm_addr, shm_sz,
                               a2preq_qsz, p2areq_qsz,
+                              fcm_addr, fcm_sz,
                               harts_mask, flags)) {
         return NULL;
     }
