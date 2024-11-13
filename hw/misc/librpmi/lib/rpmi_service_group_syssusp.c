@@ -67,9 +67,9 @@ static enum rpmi_error rpmi_syssusp_get_attributes(struct rpmi_service_group *gr
 
 	syssusp_type = rpmi_syssusp_find_type(sgsusp, type);
 	if (syssusp_type) {
-		attr |= RPMI_SYSSUSP_ATTRIBUTES_FLAGS_SUPPORTED;
+		attr |= RPMI_SYSSUSP_ATTRS_FLAGS_SUSPENDTYPE;
 		attr |= (syssusp_type->attr &
-			 RPMI_SYSSUSP_ATTRIBUTES_FLAGS_CUSTOM_RESUME);
+			 RPMI_SYSSUSP_ATTRS_FLAGS_RESUMEADDR);
 	}
 
 	*response_datalen = 2 * sizeof(*resp);
@@ -102,13 +102,13 @@ static enum rpmi_error rpmi_syssusp_do_suspend(struct rpmi_service_group *group,
 
 	hart_index = rpmi_hsm_hart_id2index(sgsusp->hsm, hart_id);
 	if (hart_index == LIBRPMI_HSM_INVALID_HART_INDEX) {
-		status = RPMI_ERR_INVAL;
+		status = RPMI_ERR_INVALID_PARAM;
 		goto done;
 	}
 
 	syssusp_type = rpmi_syssusp_find_type(sgsusp, type);
 	if (!syssusp_type) {
-		status = RPMI_ERR_NOTSUPP;
+		status = RPMI_ERR_INVALID_PARAM;
 		goto done;
 	}
 
@@ -147,14 +147,14 @@ done:
 	return RPMI_SUCCESS;
 }
 
-static struct rpmi_service rpmi_syssusp_services[RPMI_SYSSUSP_SRV_MAX] = {
+static struct rpmi_service rpmi_syssusp_services[RPMI_SYSSUSP_SRV_ID_MAX] = {
 	[RPMI_SYSRST_SRV_ENABLE_NOTIFICATION] = {
 		.service_id = RPMI_SYSRST_SRV_ENABLE_NOTIFICATION,
 		.min_a2p_request_datalen = 4,
 		.process_a2p_request = NULL,
 	},
-	[RPMI_SYSSUSP_SRV_GET_SYSTEM_SUSPEND_ATTRIBUTES] = {
-		.service_id = RPMI_SYSSUSP_SRV_GET_SYSTEM_SUSPEND_ATTRIBUTES,
+	[RPMI_SYSSUSP_SRV_GET_ATTRIBUTES] = {
+		.service_id = RPMI_SYSSUSP_SRV_GET_ATTRIBUTES,
 		.min_a2p_request_datalen = 4,
 		.process_a2p_request = rpmi_syssusp_get_attributes,
 	},
@@ -174,7 +174,7 @@ static enum rpmi_error rpmi_syssusp_process_events(struct rpmi_service_group *gr
 	case RPMI_SYSSUSP_STATE_SUSPEND_PENDING:
 		if (!sgsusp->ops->system_suspend_ready(sgsusp->ops_priv,
 						       sgsusp->current_hart_index))
-			return RPMI_SUCCESS;
+			return RPMI_ERR_BUSY;
 		sgsusp->ops->system_suspend_finalize(sgsusp->ops_priv,
 						sgsusp->current_hart_index,
 						sgsusp->current_syssusp_type,
@@ -184,7 +184,7 @@ static enum rpmi_error rpmi_syssusp_process_events(struct rpmi_service_group *gr
 	case RPMI_SYSSUSP_STATE_SUSPENDED:
 		if (!sgsusp->ops->system_suspend_can_resume(sgsusp->ops_priv,
 							    sgsusp->current_hart_index))
-			return RPMI_SUCCESS;
+			return RPMI_ERR_BUSY;
 		status = sgsusp->ops->system_suspend_resume(sgsusp->ops_priv,
 							sgsusp->current_hart_index,
 							sgsusp->current_syssusp_type,
@@ -244,7 +244,7 @@ rpmi_service_group_syssusp_create(struct rpmi_hsm *hsm,
 	group = &sgsusp->group;
 	group->name = "syssusp";
 	group->servicegroup_id = RPMI_SRVGRP_SYSTEM_SUSPEND;
-	group->max_service_id = RPMI_SYSSUSP_SRV_MAX;
+	group->max_service_id = RPMI_SYSSUSP_SRV_ID_MAX;
 	group->services = rpmi_syssusp_services;
 	group->process_events = rpmi_syssusp_process_events;
 	group->lock = rpmi_env_alloc_lock();

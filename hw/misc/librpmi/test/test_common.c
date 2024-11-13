@@ -52,7 +52,7 @@ static int test_run(struct rpmi_test_scenario *scene, struct rpmi_test *test,
 	do {
 		rc = rpmi_transport_enqueue(scene->xport,
 					    RPMI_QUEUE_A2P_REQ, req_msg);
-	} while (rc == RPMI_ERR_OUTOFRES);
+	} while (rc == RPMI_ERR_IO);
 
 	if (rc)
 		printf("%s: failed (error %d)\n", __func__,  rc);
@@ -238,6 +238,8 @@ int test_scenario_default_init(struct rpmi_test_scenario *scene)
 	}
 
 	scene->xport = rpmi_transport_shmem_create("test_transport", scene->slot_size,
+						   ((scene->shm_size * 3) / 4) / 2,
+						   ((scene->shm_size * 1) / 4) / 2,
 						   scene->shmem);
 	if (!scene->xport) {
 		printf("%s: failed to create test rpmi_transport\n ", __func__);
@@ -250,9 +252,8 @@ int test_scenario_default_init(struct rpmi_test_scenario *scene)
 
 	scene->cntx = rpmi_context_create("test_context", scene->xport,
 					  scene->max_num_groups,
-					  scene->base.vendor_id, scene->base.vendor_sub_id,
-					  scene->base.hw_info_len, scene->base.hw_info);
-	if (!scene->xport) {
+					  scene->base.plat_info_len, scene->base.plat_info);
+	if (!scene->cntx) {
 		printf("%s: failed to create test rpmi_context\n ", __func__);
 		rpmi_transport_shmem_destroy(scene->xport);
 		scene->xport = NULL;
@@ -271,7 +272,7 @@ int test_scenario_default_cleanup(struct rpmi_test_scenario *scene)
 {
 	if (!scene) {
 		printf("Invalid test scenario\n");
-		return RPMI_ERR_INVAL;
+		return RPMI_ERR_INVALID_PARAM;
 	}
 
 	if (scene->xport) {
@@ -298,7 +299,7 @@ int test_scenario_execute(struct rpmi_test_scenario *scene)
 
 	if (!scene || !scene->init || !scene->cleanup) {
 		printf("Invalid test scenario\n");
-		return RPMI_ERR_INVAL;
+		return RPMI_ERR_INVALID_PARAM;
 	}
 
 	rc = scene->init(scene);

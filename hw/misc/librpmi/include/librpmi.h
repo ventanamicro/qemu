@@ -113,36 +113,49 @@ struct rpmi_message {
 enum rpmi_error {
 	/* Success */
 	RPMI_SUCCESS		= 0,
-	/* General fail */
+	/* General failure  */
 	RPMI_ERR_FAILED		= -1,
-	/* Service/feature not supported */
+	/* Service or feature not supported */
 	RPMI_ERR_NOTSUPP	= -2,
 	/* Invalid Parameter  */
-	RPMI_ERR_INVAL		= -3,
-	/* Insufficient permissions  */
-	RPMI_ERR_DENIED		= -4,
-	/* Requested resource not found */
-	RPMI_ERR_NOTFOUND	= -5,
-	/* Requested resource out of range */
-	RPMI_ERR_OUTOFRANGE	= -6,
-	/* Resource limit reached */
-	RPMI_ERR_OUTOFRES	= -7,
-	/* Operation failed due to hardware issues  */
-	RPMI_ERR_HWFAULT	= -8,
-	/* System currently busy, retry later */
-	RPMI_ERR_BUSY		= -9,
-	/* Operation timed out*/
-	RPMI_ERR_TIMEOUT	= -10,
-	/* Error in communication, retry later */
-	RPMI_ERR_COMMS		= -11,
+	RPMI_ERR_INVALID_PARAM    = -3,
 	/*
-	 * Operation failed as it was already in progress or the state has
-	 * changed already for which the operation was carried out.
+	 * Denied to insufficient permissions
+	 * or due to unmet prerequisite
 	 */
-	RPMI_ERR_ALREADY	= -12,
-	/* Error in implementation which violates the specification version */
-	RPMI_ERR_IMPL		= -13,
-	RPMI_ERR_RESERVED_START	= -14,
+	RPMI_ERR_DENIED		= -4,
+	/* Invalid address or offset */
+	RPMI_ERR_INVALID_ADDR	= -5,
+	/*
+	 * Operation failed as it was already in
+	 * progress or the state has changed already
+	 * for which the operation was carried out.
+	 */
+	RPMI_ERR_ALREADY	= -6,
+	/*
+	 * Error in implementation which violates
+	 * the specification version
+	 */
+	RPMI_ERR_EXTENSION	= -7,
+	/* Operation failed due to hardware issues */
+	RPMI_ERR_HW_FAULT	= -8,
+	/* System, device or resource is busy */
+	RPMI_ERR_BUSY		= -9,
+	/* System or device or resource in invalid state */
+	RPMI_ERR_INVALID_STATE	= -10,
+	/* Index, offset or address is out of range */
+	RPMI_ERR_BAD_RANGE	= -11,
+	/* Operation timed out */
+	RPMI_ERR_TIMEOUT	= -12,
+	/*
+	 * Error in input or output or
+	 * error in sending or receiving data
+	 * through communication medium
+	 */
+	RPMI_ERR_IO		= -13,
+	/* No data available */
+	RPMI_ERR_NO_DATA	= -14,
+	RPMI_ERR_RESERVED_START	= -15,
 	RPMI_ERR_RESERVED_END	= -127,
 	RPMI_ERR_VENDOR_START	= -128,
 };
@@ -159,13 +172,28 @@ enum rpmi_queue_type {
 /** RPMI ServiceGroups IDs */
 enum rpmi_servicegroup_id {
 	RPMI_SRVGRP_ID_MIN = 0,
-	RPMI_SRVGRP_BASE = 0x00001,
-	RPMI_SRVGRP_SYSTEM_RESET = 0x00002,
-	RPMI_SRVGRP_SYSTEM_SUSPEND = 0x00003,
-	RPMI_SRVGRP_HSM = 0x00004,
-	RPMI_SRVGRP_CPPC = 0x00005,
-	RPMI_SRVGRP_CLOCK = 0x00007,
+	RPMI_SRVGRP_BASE = 0x0001,
+	RPMI_SRVGRP_SYSTEM_RESET = 0x0002,
+	RPMI_SRVGRP_SYSTEM_SUSPEND = 0x0003,
+	RPMI_SRVGRP_HSM = 0x0004,
+	RPMI_SRVGRP_CPPC = 0x0005,
+	RPMI_SRVGRP_VOLTAGE = 0x0006,
+	RPMI_SRVGRP_CLOCK = 0x0007,
+	RPMI_SRVGRP_DEVICE_POWER = 0x0008,
+	RPMI_SRVGRP_PERFORMANCE = 0x0009,
+	RPMI_SRVGRP_MANAGEMENT_MODE = 0x000A,
+	RPMI_SRVGRP_RAS_AGENT = 0x000B,
+	RPMI_SRVGRP_REQUEST_FORWARD = 0x000C,
 	RPMI_SRVGRP_ID_MAX_COUNT,
+	
+	/* Reserved range for service groups */
+	RPMI_SRVGRP_RESERVE_START = RPMI_SRVGRP_ID_MAX_COUNT,
+	RPMI_SRVGRP_RESERVE_END = 0x7FFF,
+	
+	/* Vendor/Implementation-specific service groups range */
+	RPMI_SRVGRP_VENDOR_START = 0x8000,
+	RPMI_SRVGRP_VENDOR_END = 0xFFFF,
+
 };
 
 /** RPMI Base ServiceGroup Service IDs */
@@ -174,11 +202,11 @@ enum rpmi_base_service_id {
 	RPMI_BASE_SRV_GET_IMPLEMENTATION_VERSION = 0x02,
 	RPMI_BASE_SRV_GET_IMPLEMENTATION_IDN = 0x03,
 	RPMI_BASE_SRV_GET_SPEC_VERSION = 0x04,
-	RPMI_BASE_SRV_GET_HW_INFO = 0x05,
+	RPMI_BASE_SRV_GET_PLATFORM_INFO = 0x05,
 	RPMI_BASE_SRV_PROBE_SERVICE_GROUP = 0x06,
 	RPMI_BASE_SRV_GET_ATTRIBUTES = 0x07,
 	RPMI_BASE_SRV_SET_MSI = 0x08,
-	RPMI_BASE_SRV_MAX = 0x09,
+	RPMI_BASE_SRV_ID_MAX = 0x09,
 };
 
 #define RPMI_BASE_VERSION_MINOR_POS		0
@@ -191,49 +219,55 @@ enum rpmi_base_service_id {
 ((((__major) & RPMI_BASE_VERSION_MAJOR_MASK) << RPMI_BASE_VERSION_MAJOR_POS) | \
  (((__minor) & RPMI_BASE_VERSION_MINOR_MASK) << RPMI_BASE_VERSION_MINOR_POS))
 
-#define RPMI_BASE_VENDOR_ID(__id, __subid)	\
-((((__subid) & 0xffff) << 16) | ((__id) & 0xffff))
-
-#define RPMI_BASE_FLAGS_F0_EV_NOTIFY		(1U << 31)
-#define RPMI_BASE_FLAGS_F0_MSI_EN		(1U << 30)
+#define RPMI_BASE_FLAGS_F0_PRIVILEGE		(1U << 2)
+#define RPMI_BASE_FLAGS_F0_EV_NOTIFY		(1U << 1)
+#define RPMI_BASE_FLAGS_F0_MSI_EN		1U
 
 /** RPMI System Reset ServiceGroup Service IDs */
 enum rpmi_sysreset_service_id {
 	RPMI_SYSRST_SRV_ENABLE_NOTIFICATION = 0x01,
-	RPMI_SYSRST_SRV_GET_SYSTEM_RESET_ATTRIBUTES = 0x02,
+	RPMI_SYSRST_SRV_GET_ATTRIBUTES = 0x02,
 	RPMI_SYSRST_SRV_SYSTEM_RESET = 0x03,
-	RPMI_SYSRST_SRV_MAX = 0x04,
+	RPMI_SYSRST_SRV_ID_MAX = 0x04,
 };
 
-#define RPMI_SYSRST_TYPE_SHUTDOWN		0U
-#define RPMI_SYSRST_TYPE_COLD_REBOOT		1U
-#define RPMI_SYSRST_TYPE_WARM_REBOOT		2U
+/** RPMI System Reset types */
+enum rpmi_sysrst_reset_type {
+	RPMI_SYSRST_TYPE_SHUTDOWN = 0x0,
+	RPMI_SYSRST_TYPE_COLD_REBOOT = 0x1,
+	RPMI_SYSRST_TYPE_WARM_REBOOT = 0x2,
+	RPMI_SYSRST_TYPE_MAX,
+};
 
-#define RPMI_SYSRST_ATTRIBUTES_FLAGS_SUPPORTED	(1U << 31)
+#define RPMI_SYSRST_ATTRS_FLAGS_RESETTYPE	1U
 
 /** RPMI System Suspend ServiceGroup Service IDs */
 enum rpmi_system_suspend_service_id {
 	RPMI_SYSSUSP_SRV_ENABLE_NOTIFICATION = 0x01,
-	RPMI_SYSSUSP_SRV_GET_SYSTEM_SUSPEND_ATTRIBUTES = 0x02,
+	RPMI_SYSSUSP_SRV_GET_ATTRIBUTES = 0x02,
 	RPMI_SYSSUSP_SRV_SYSTEM_SUSPEND = 0x03,
-	RPMI_SYSSUSP_SRV_MAX = 0x04,
+	RPMI_SYSSUSP_SRV_ID_MAX = 0x04,
 };
 
-#define RPMI_SYSSUSP_TYPE_SUSPEND_TO_RAM		0U
+/* RPMI Suspend Types */
+enum rpmi_syssusp_suspend_type {
+	RPMI_SYSSUSP_TYPE_SUSPEND_TO_RAM = 0x0,
+	RPMI_SYSSUSP_TYPE_MAX,
+};
 
-#define RPMI_SYSSUSP_ATTRIBUTES_FLAGS_CUSTOM_RESUME	(1U << 31)
-#define RPMI_SYSSUSP_ATTRIBUTES_FLAGS_SUPPORTED		(1U << 30)
+#define RPMI_SYSSUSP_ATTRS_FLAGS_RESUMEADDR	(1U << 1)
+#define RPMI_SYSSUSP_ATTRS_FLAGS_SUSPENDTYPE	1U
 
 /** RPMI Hart State Management (HSM) ServiceGroup Service IDs */
 enum rpmi_hsm_service_id {
 	RPMI_HSM_SRV_ENABLE_NOTIFICATION = 0x01,
-	RPMI_HSM_SRV_HART_START = 0x02,
-	RPMI_HSM_SRV_HART_STOP = 0x03,
-	RPMI_HSM_SRV_HART_SUSPEND = 0x04,
-	RPMI_HSM_SRV_GET_HART_STATUS = 0x05,
-	RPMI_HSM_SRV_GET_HART_LIST = 0x06,
-	RPMI_HSM_SRV_GET_SUSPEND_TYPES = 0x07,
-	RPMI_HSM_SRV_GET_SUSPEND_INFO = 0x08,
+	RPMI_HSM_SRV_GET_HART_STATUS = 0x02,
+	RPMI_HSM_SRV_GET_HART_LIST = 0x03,
+	RPMI_HSM_SRV_GET_SUSPEND_TYPES = 0x04,
+	RPMI_HSM_SRV_GET_SUSPEND_INFO = 0x05,
+	RPMI_HSM_SRV_HART_START = 0x06,
+	RPMI_HSM_SRV_HART_STOP = 0x07,
+	RPMI_HSM_SRV_HART_SUSPEND = 0x08,
 	RPMI_HSM_SRV_ID_MAX = 0x09,
 };
 
@@ -250,6 +284,7 @@ enum rpmi_clock_service_id {
 	RPMI_CLK_SRV_ID_MAX,
 };
 
+/** RPMI CPPC (CPPC) ServiceGroup Service IDs */
 enum rpmi_cppc_service_id {
 	RPMI_CPPC_SRV_ENABLE_NOTIFICATION = 0x01,
 	RPMI_CPPC_SRV_PROBE_REG = 0x02,
@@ -276,9 +311,9 @@ enum rpmi_cppc_service_id {
 #define LIBRPMI_IMPL_VERSION_MAJOR			0
 #define LIBRPMI_IMPL_VERSION_MINOR			1
 
-#define LIBRPMI_TRANSPORT_SHMEM_MIN_SLOTS		16
-#define LIBRPMI_TRANSPORT_SHMEM_MIN_SIZE(__slot_size)	\
-	((__slot_size) * LIBRPMI_TRANSPORT_SHMEM_MIN_SLOTS * RPMI_QUEUE_MAX)
+#define LIBRPMI_TRANSPORT_SHMEM_QUEUE_MIN_SLOTS		4
+#define LIBRPMI_TRANSPORT_SHMEM_QUEUE_MIN_SIZE(__slot_size)	\
+	((__slot_size) * LIBRPMI_TRANSPORT_SHMEM_QUEUE_MIN_SLOTS)
 
 /** RPMI shared memory structure to access a platform shared memory */
 struct rpmi_shmem;
@@ -412,6 +447,12 @@ struct rpmi_transport {
 	/** Endianness of the messages transferred through this transport */
 	rpmi_bool_t is_be;
 
+	/**
+	 * Is P2A channel available (in case of shmem based transport
+	 * is p2a req and a2p ack queues)
+	 */
+	rpmi_bool_t is_p2a_channel;
+
 	/** Slot (or max message) size in transport queues */
 	rpmi_size_t slot_size;
 
@@ -505,11 +546,15 @@ enum rpmi_error rpmi_transport_dequeue(struct rpmi_transport *trans,
  *
  * @param[in] name		name of the shared memory transport instance
  * @param[in] slot_size		size of message slot for queues in shared memory
+ * @param[in] a2p_req_queue_size	size of A2P request and P2A acknowledgement queues
+ * @param[in] p2a_req_queue_size	size of P2A request and A2P acknowledgement queues
  * @param[in] shmem		pointer to a RPMI shared memory instance
  * @return pointer to RPMI transport upon success and NULL upon failure
  */
 struct rpmi_transport *rpmi_transport_shmem_create(const char *name,
 						   rpmi_uint32_t slot_size,
+						   rpmi_uint32_t a2p_req_queue_size,
+						   rpmi_uint32_t p2a_req_queue_size,
 						   struct rpmi_shmem *shmem);
 
 /**
@@ -595,19 +640,15 @@ void rpmi_context_remove_group(struct rpmi_context *cntx,
  * @param[in] name		name of the context instance
  * @param[in] trans		pointer to RPMI transport instance
  * @param[in] max_num_groups	maximum number of service groups
- * @param[in] vendor_id		vendor ID of HW
- * @param[in] vendor_sub_id	vendor SUB-ID of HW
- * @param[in] hw_info_len	length of the HW info string
- * @param[in] hw_info		pointer to the HW info string
+ * @param[in] plat_info_len	length of the Platform info string
+ * @param[in] plat_info		pointer to the Platform info string
  * @return pointer to RPMI context upon success and NULL upon failure
  */
 struct rpmi_context *rpmi_context_create(const char *name,
 					 struct rpmi_transport *trans,
 					 rpmi_uint32_t max_num_groups,
-					 rpmi_uint16_t vendor_id,
-					 rpmi_uint16_t vendor_sub_id,
-					 rpmi_uint32_t hw_info_len,
-					 const rpmi_uint8_t *hw_info);
+					 rpmi_uint32_t plat_info_len,
+					 const char *plat_info);
 
 /**
  * @brief Destroy (of free) a RPMI context
@@ -622,7 +663,7 @@ void rpmi_context_destroy(struct rpmi_context *cntx);
 
 /**
  * \defgroup LIBRPMI_SERVICEGROUP_INTERFACE RPMI Service Group Library Interface
- * @brief Data structures implemented by the RPMI library for managing RPMI 
+ * @brief Data structures implemented by the RPMI library for managing RPMI
  * service groups.
  * @{
  */
@@ -690,7 +731,7 @@ struct rpmi_service_group {
 /**
  * \defgroup LIBRPMI_HSM_INTERFACE RPMI Hart State Management Library Interface
  * @brief Global functions and data structures implemented by the RPMI library
- * for RPMI hart state management. This is shared by multiple RPMI service 
+ * for RPMI hart state management. This is shared by multiple RPMI service
  * groups.
  * @{
  */
@@ -722,12 +763,13 @@ enum rpmi_hart_hw_state {
 	RPMI_HART_HW_STATE_SUSPENDED = 0x2,
 };
 
+#define RPMI_HSM_SUSPEND_INFO_FLAGS_TIMER_STOP		1U
+
 /** RPMI HSM suspend type */
 struct rpmi_hsm_suspend_type {
 	rpmi_uint32_t type;
 	struct {
 		rpmi_uint32_t flags;
-#define RPMI_HSM_SUSPEND_INFO_FLAGS_TIMER_STOP	(1U << 31)
 		rpmi_uint32_t entry_latency_us;
 		rpmi_uint32_t exit_latency_us;
 		rpmi_uint32_t wakeup_latency_us;
@@ -985,7 +1027,10 @@ struct rpmi_syssusp_platform_ops {
 						  rpmi_uint32_t hart_index,
 			const struct rpmi_system_suspend_type *syssusp_type,
 						  rpmi_uint64_t resume_addr);
-	/** Check if the system is ready to suspend */
+	/**
+	 * Check if the system is ready to suspend
+	 * Returns TRUE if system is ready otherwise FALSE
+	 */
 	rpmi_bool_t (*system_suspend_ready)(void *priv,
 					    rpmi_uint32_t hart_index);
 	/** Finalize system suspend */
@@ -993,7 +1038,10 @@ struct rpmi_syssusp_platform_ops {
 					rpmi_uint32_t hart_index,
 			const struct rpmi_system_suspend_type *syssusp_type,
 					rpmi_uint64_t resume_addr);
-	/** Check if the system is ready to resume */
+	/**
+	 * Check if the system is ready to resume
+	 * Returns TRUE if system can resume otherwise FALSE
+	 */
 	rpmi_bool_t (*system_suspend_can_resume)(void *priv,
 						 rpmi_uint32_t hart_index);
 	/** Resume from system suspend */
@@ -1138,6 +1186,7 @@ struct rpmi_clock_platform_ops {
 	/**
 	 * Check if the requested rate is not in the allowed margin(Hz)
 	 * which require change in clock rate.
+	 * Returns TRUE if rate change required otherwise FALSE
 	 **/
 	rpmi_bool_t (*rate_change_match)(void *priv,
 				  rpmi_uint32_t clock_id,
@@ -1236,7 +1285,7 @@ enum rpmi_cppc_mode {
 	 * for performance control.
 	 */
 	RPMI_CPPC_PASSIVE_MODE,
-	
+
 	/**
 	 * CPPC2 mode also called Autonomous mode, which
 	 * uses Minimum Performance, Maximum Performance
@@ -1296,6 +1345,51 @@ struct rpmi_cppc_regs {
 	rpmi_uint32_t transition_latency;
 };
 
+/* CPPC Fastchannel size of both types as per RPMI spec */
+#define RPMI_CPPC_FASTCHAN_SIZE		8
+
+/**
+ * CPPC Performance Request Fastchannel
+ *
+ * Per-hart. The application processor will use this
+ * fast-channel for performance request change either
+ * by writing the desired performance level or the
+ * performance limit change.
+ */
+union rpmi_cppc_perf_request_fastchan {
+	/** CPPC passive(default) mode fastchannel */
+	struct  {
+		rpmi_uint32_t desired_perf;
+		rpmi_uint32_t __reserved;
+	} passive;
+
+	/** CPPC Active(autonomous) mode fastchannel */
+	struct {
+		rpmi_uint32_t min_perf;
+		rpmi_uint32_t max_perf;
+	} active;
+};
+
+/**
+ * CPPC Performance Feedback Fast-channel
+ *
+ * Per-hart. The platform microcontroller will write the
+ * latest current frequency after every performance change
+ * in this fast-channel.
+ *
+ * The target frequency applied is not directly deducible
+ * from the performance level since the final target frequency
+ * of the application processor is the result of many
+ * platform heuristics.
+ *
+ * The frequency is in Hertz
+ */
+
+struct rpmi_cppc_perf_feedback_fastchan {
+	rpmi_uint32_t cur_freq_low;
+	rpmi_uint32_t cur_freq_high;
+};
+
 struct rpmi_cppc_platform_ops {
 	/**
 	 * cppc get register value for a hart.
@@ -1304,7 +1398,7 @@ struct rpmi_cppc_platform_ops {
 	                                rpmi_uint32_t reg_id,
 	                                rpmi_uint32_t hart_index,
 	                                rpmi_uint64_t *val);
-	
+
 	/**
 	 * cppc set register value for a hart.
 	 */
@@ -1316,8 +1410,14 @@ struct rpmi_cppc_platform_ops {
 	 * cppc update performance level for a hart
 	 */
 	enum rpmi_error (*cppc_update_perf)(void *priv,
-					    rpmi_uint32_t desired_perf,
-					    rpmi_uint32_t hart_index);
+					    rpmi_uint32_t hart_index,
+				     	    rpmi_uint32_t desired_perf);
+	/**
+	 * cppc get current frequency in hertz for a hart
+	 */
+	enum rpmi_error (*cppc_get_current_freq)(void *priv,
+						 rpmi_uint32_t hart_index,
+						 rpmi_uint64_t *current_freq_hz);
 };
 
 /**
@@ -1327,6 +1427,8 @@ struct rpmi_cppc_platform_ops {
  * @param[in] cppc_regs		pointer to cppc register static data
  * @param[in] mode		cppc mode (passive or active)
  * @param[in] shmem_fastchan	pointer to fastchannel shared memory instance
+ * @param[in] perf_request_shmem_offset	perf request fastchannel shmem region offset
+ * @param[in] perf_feedback_shmem_offset	perf feedback fastchannel shmem region offset
  * @param[in] ops		pointer to platform specific cppc operations
  * @param[in] ops_priv		pointer to private data of platform operations
  * @return rpmi_service_group *	pointer to RPMI service group instance upon
@@ -1337,6 +1439,8 @@ rpmi_service_group_cppc_create(struct rpmi_hsm *hsm,
 			       const struct rpmi_cppc_regs *cppc_regs,
 			       enum rpmi_cppc_mode mode,
 			       struct rpmi_shmem *shmem_fastchan,
+			       rpmi_uint64_t perf_request_shmem_offset,
+			       rpmi_uint64_t perf_feedback_shmem_offset,
 			       const struct rpmi_cppc_platform_ops *ops,
 			       void *ops_priv);
 /**
