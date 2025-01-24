@@ -27,6 +27,7 @@
 #include "hw/acpi/acpi-defs.h"
 #include "hw/acpi/acpi.h"
 #include "hw/acpi/aml-build.h"
+#include "hw/acpi/generic_event_device.h"
 #include "hw/acpi/pci.h"
 #include "hw/acpi/utils.h"
 #include "hw/intc/riscv_aclint.h"
@@ -39,6 +40,7 @@
 #include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "system/reset.h"
+#include "hw/misc/riscv_rpmi.h"
 
 #define ACPI_BUILD_TABLE_SIZE             0x20000
 #define ACPI_BUILD_INTC_ID(socket, index) ((socket << 24) | (index))
@@ -699,6 +701,44 @@ static void acpi_add_sysmsi_intc_mbox(Aml *scope, uint32_t gsi_base)
     aml_append(scope, intcdev);
 }
 
+static void build_riscv_sysmsi_ged_aml(Aml *table, uint32_t ged_irq_base,
+                                       uint32_t ged_num_irq, RISCVVirtState *s)
+{
+    Aml *crs = aml_resource_template();
+    Aml *evt;
+    Aml *dev = aml_device("MGED");
+    Aml *if_arg0;
+    uint32_t irq = s->sysmsi_gsi_base + ged_irq_base;
+    uint32_t gsi_power_down = s->sysmsi_gsi_base + RPMI_SYS_MSI_SHUTDOWN_INDEX;
+    uint32_t i;
+
+    /* _CRS interrupt */
+    for (i = 0; i < ged_num_irq; i++) {
+        aml_append(crs, aml_interrupt(AML_CONSUMER, AML_EDGE, AML_ACTIVE_HIGH,
+                                      AML_EXCLUSIVE, &irq, 1));
+        irq++;
+    }
+
+    aml_append(dev, aml_name_decl("_HID", aml_string("ACPI0013")));
+    aml_append(dev, aml_name_decl("_UID", aml_string(GED_DEVICE)));
+    aml_append(dev, aml_name_decl("_CRS", crs));
+
+    evt = aml_method("_EVT", 1, AML_SERIALIZED);
+    {
+       /* Support only POWERDOWN for now */
+       if_arg0 = aml_if(aml_equal(aml_arg(0), aml_int(gsi_power_down)));
+       aml_append(if_arg0,
+                       aml_notify(aml_name(ACPI_POWER_BUTTON_DEVICE),
+                                  aml_int(0x80)));
+       aml_append(evt, if_arg0);
+    }
+
+    /* Append _EVT method */
+    aml_append(dev, evt);
+
+    aml_append(table, dev);
+}
+
 /* DSDT */
 static void build_dsdt(GArray *table_data,
                        BIOSLinker *linker,
@@ -747,6 +787,7 @@ static void build_dsdt(GArray *table_data,
         gsi_base += VIRT_IRQCHIP_NUM_SOURCES + 1;
         s->sysmsi_gsi_base = gsi_base;
         acpi_add_sysmsi_intc_mbox(scope, gsi_base);
+        build_riscv_sysmsi_ged_aml(scope, RPMI_SYS_MSI_SHUTDOWN_INDEX, 3, s);
     }
 
     acpi_dsdt_add_uart(scope, &memmap[VIRT_UART0], UART0_IRQ);
@@ -773,6 +814,9 @@ static void build_dsdt(GArray *table_data,
         acpi_dsdt_add_gpex_host(scope, PCIE_IRQ + VIRT_IRQCHIP_NUM_SOURCES * 2);
     }
 
+    if (s->have_rpmi && s->aia_type == VIRT_AIA_TYPE_APLIC_IMSIC) {
+        acpi_dsdt_add_power_button(scope);
+    }
     aml_append(dsdt, scope);
 
     /* copy AML table into ACPI tables blob and patch header there */
