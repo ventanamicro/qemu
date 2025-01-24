@@ -10,6 +10,10 @@ config IBEX
 config RISCV_RERI
     bool
 
+config RISCV_TRACE
+    bool
+    select REGISTER
+
 # RISC-V machines in alphabetical order
 
 config MICROCHIP_PFSOC
@@ -74,6 +78,7 @@ config RISCV_VIRT
     select ACPI
     select ACPI_PCI
     select ACPI_HW_REDUCED
+    select RISCV_TRACE
 
 config SHAKTI_C
     bool
