@@ -349,12 +349,12 @@ static void acpi_dsdt_add_cpus(Aml *scope, RISCVVirtState *s)
     }
 }
 
-static void acpi_dsdt_add_plic_aplic(Aml *scope, uint8_t socket_count,
+static uint32_t acpi_dsdt_add_plic_aplic(Aml *scope, uint8_t socket_count,
                                      uint64_t mmio_base, uint64_t mmio_size,
                                      const char *hid)
 {
     uint64_t plic_aplic_addr;
-    uint32_t gsi_base;
+    uint32_t gsi_base = 0;
     uint8_t  socket;
 
     for (socket = 0; socket < socket_count; socket++) {
@@ -371,6 +371,8 @@ static void acpi_dsdt_add_plic_aplic(Aml *scope, uint8_t socket_count,
         aml_append(dev, aml_name_decl("_CRS", crs));
         aml_append(scope, dev);
     }
+
+    return gsi_base;
 }
 
 static void
@@ -645,15 +647,69 @@ static void build_fadt_rev6(GArray *table_data,
     build_fadt(table_data, linker, &fadt, s->oem_id, s->oem_table_id);
 }
 
+static void acpi_add_sysmsi_intc_mbox(Aml *scope, uint32_t gsi_base)
+{
+    Aml *mbdev = aml_device("SMMB");
+
+    aml_append(mbdev, aml_name_decl("_HID", aml_string("RSCV0005")));
+    aml_append(mbdev, aml_name_decl("_UID", aml_int(0)));
+    Aml *mbpkg = aml_package(2);
+    aml_append(mbpkg, aml_string("#mbox-cells"));
+    aml_append(mbpkg, aml_int(2));
+
+    Aml *mbUUID = aml_touuid("DAFFD814-6EBA-4D8C-8A91-BC9BBF4AA301");
+
+    Aml *mbpkg1 = aml_package(1);
+    aml_append(mbpkg1, mbpkg);
+
+    Aml *mbpackage = aml_package(2);
+    aml_append(mbpackage, mbUUID);
+    aml_append(mbpackage, mbpkg1);
+
+    aml_append(mbdev, aml_name_decl("_DSD", mbpackage));
+    aml_append(scope, mbdev);
+
+    Aml *dep_pkg = aml_package(1);
+    aml_append(dep_pkg, aml_name("\\_SB.SMMB"));
+    Aml *intcdev = aml_device("SMSI");
+    aml_append(intcdev, aml_name_decl("_HID", aml_string("RSCV0006")));
+    aml_append(intcdev, aml_name_decl("_UID", aml_int(0)));
+    aml_append(intcdev, aml_name_decl("_GSB", aml_int(gsi_base)));
+    aml_append(intcdev, aml_name_decl("_DEP", dep_pkg));
+
+    Aml *pkg = aml_package(2);
+    aml_append(pkg, aml_string("mboxes"));
+
+    Aml *subpkg = aml_package(3);
+    aml_append(subpkg, aml_string("\\_SB.SMMB"));
+    aml_append(subpkg, aml_int(0x1000));
+    aml_append(subpkg, aml_int(0));
+    aml_append(pkg, subpkg);
+
+    Aml *UUID = aml_touuid("DAFFD814-6EBA-4D8C-8A91-BC9BBF4AA301");
+
+    Aml *pkg1 = aml_package(1);
+    aml_append(pkg1, pkg);
+
+    Aml *package = aml_package(2);
+    aml_append(package, UUID);
+    aml_append(package, pkg1);
+
+    aml_append(intcdev, aml_name_decl("_DSD", package));
+    aml_append(scope, intcdev);
+}
+
 /* DSDT */
 static void build_dsdt(GArray *table_data,
                        BIOSLinker *linker,
                        RISCVVirtState *s)
 {
-    Aml *scope, *dsdt;
+    const MemMapEntry *memmap = s->memmap;
     MachineState *ms = MACHINE(s);
     uint8_t socket_count;
-    const MemMapEntry *memmap = s->memmap;
+    Aml *scope, *dsdt;
+    uint32_t gsi_base;
+
     AcpiTable table = { .sig = "DSDT", .rev = 2, .oem_id = s->oem_id,
                         .oem_table_id = s->oem_table_id };
 
@@ -676,11 +732,21 @@ static void build_dsdt(GArray *table_data,
     socket_count = riscv_socket_count(ms);
 
     if (s->aia_type == VIRT_AIA_TYPE_NONE) {
-        acpi_dsdt_add_plic_aplic(scope, socket_count, memmap[VIRT_PLIC].base,
-                                 memmap[VIRT_PLIC].size, "RSCV0001");
+        gsi_base = acpi_dsdt_add_plic_aplic(scope, socket_count,
+                                            memmap[VIRT_PLIC].base,
+                                            memmap[VIRT_PLIC].size,
+                                            "RSCV0001");
     } else {
-        acpi_dsdt_add_plic_aplic(scope, socket_count, memmap[VIRT_APLIC_S].base,
-                                 memmap[VIRT_APLIC_S].size, "RSCV0002");
+        gsi_base = acpi_dsdt_add_plic_aplic(scope, socket_count,
+                                            memmap[VIRT_APLIC_S].base,
+                                            memmap[VIRT_APLIC_S].size,
+                                            "RSCV0002");
+    }
+
+    if (s->have_rpmi && s->aia_type == VIRT_AIA_TYPE_APLIC_IMSIC) {
+        gsi_base += VIRT_IRQCHIP_NUM_SOURCES + 1;
+        s->sysmsi_gsi_base = gsi_base;
+        acpi_add_sysmsi_intc_mbox(scope, gsi_base);
     }
 
     acpi_dsdt_add_uart(scope, &memmap[VIRT_UART0], UART0_IRQ);
