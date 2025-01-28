@@ -100,6 +100,8 @@ enum {
     VIRT_RERI_BANK_DRAM,
     VIRT_RERI_BANK_HARTS,
     VIRT_ACPI_GED,
+    VIRT_TR_ENCODERS,
+    VIRT_TR_RAM_SINKS,
     VIRT_LAST_MEMMAP /* Keep this entry always last */
 };
 
