@@ -323,6 +323,7 @@ static void trencoder_reset(DeviceState *dev)
 static void trencoder_realize(DeviceState *dev, Error **errp)
 {
     TraceEncoder *te = TRACE_ENCODER(dev);
+    g_autofree char *trace_out_file = NULL;
 
     memory_region_init_io(&te->reg_mem, OBJECT(dev),
                           &trencoder_ops, te,
@@ -343,6 +344,20 @@ static void trencoder_realize(DeviceState *dev, Error **errp)
             .opaque = te,
         };
     }
+
+    if (te->tracelog) {
+        trace_out_file = g_strdup_printf("rv-etrace-cpu%d.dat", te->cpu_id);
+        te->trace_out = fopen(trace_out_file, "w");
+    }
+}
+
+static void trencoder_unrealize(DeviceState *dev)
+{
+    TraceEncoder *te = TRACE_ENCODER(dev);
+
+    if (te->tracelog) {
+        fclose(te->trace_out);
+    }
 }
 
 static void trencoder_update_ramsink_writep(TraceEncoder *te,
@@ -362,11 +377,29 @@ static void trencoder_update_ramsink_writep(TraceEncoder *te,
     trencoder_write_reg(te, A_TR_RAM_WP_HIGH, extract64(wp_val, 32, 32));
 }
 
+/*
+ * This function assumes that the trencoder->trace_out
+ * FD is already opened.
+ */
+static void trencoder_write_trace_file(TraceEncoder *te, uint8_t *msg,
+                                       uint8_t msg_size)
+{
+    if (te->tracelog) {
+        fwrite(msg, 1, msg_size, te->trace_out);
+    }
+}
+
 static void trencoder_send_message_smem(TraceEncoder *trencoder,
                                         uint8_t *msg, uint8_t msg_size)
 {
     hwaddr dest = trencoder_read_ramsink_writep(trencoder);
     bool wrapped = false;
+
+    /*
+     * Ignore ram wrapping and mem alignment when
+     * writing the log file.
+     */
+    trencoder_write_trace_file(trencoder, msg, msg_size);
 
     msg_size = QEMU_ALIGN_UP(msg_size, 4);
 
@@ -566,6 +599,8 @@ static const Property trencoder_props[] = {
     DEFINE_PROP_UINT32("reg-mem-size", TraceEncoder,
                        reg_mem_size, TRACE_R_MAX * 4),
     DEFINE_PROP_INT32("cpu-id", TraceEncoder, cpu_id, 0),
+
+    DEFINE_PROP_BOOL("trace-log", TraceEncoder, tracelog, false),
 };
 
 static const VMStateDescription vmstate_trencoder = {
@@ -591,6 +626,7 @@ static void trencoder_class_init(ObjectClass *klass, const void *data)
     device_class_set_legacy_reset(dc, trencoder_reset);
     device_class_set_props(dc, trencoder_props);
     dc->realize = trencoder_realize;
+    dc->unrealize = trencoder_unrealize;
     dc->vmsd = &vmstate_trencoder;
 }
 

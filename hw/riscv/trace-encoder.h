@@ -21,6 +21,8 @@ struct TraceEncoder {
     /*< private >*/
     SysBusDevice parent_obj;
 
+    FILE *trace_out;
+
     RISCVCPU *cpu;
     int cpu_id;
 
@@ -44,6 +46,8 @@ struct TraceEncoder {
     bool enabled;
     bool trace_running;
     bool trace_next_insn;
+
+    bool tracelog;
 };
 
 #define TYPE_TRACE_ENCODER "trace-encoder"
