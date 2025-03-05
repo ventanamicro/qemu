@@ -320,6 +320,35 @@ static void trencoder_reset(DeviceState *dev)
     te->branches = 0;
 }
 
+static void trencoder_dryrun_cb(void *opaque)
+{
+    TraceEncoder *te = opaque;
+    uint32_t trace_running = ARRAY_FIELD_EX32(te->regs, TR_TE_CONTROL, INST_TRACING);
+    uint64_t val;
+
+    if (!trace_running) {
+        /* Turn on tracing, setting a timer to turn it off later */
+        ARRAY_FIELD_DP32(te->regs, TR_TE_CONTROL, ACTIVE, 1);
+        ARRAY_FIELD_DP32(te->regs, TR_TE_CONTROL, ENABLE, 1);
+        ARRAY_FIELD_DP32(te->regs, TR_TE_CONTROL, INST_TRACING, 1);
+
+        val = register_read(&te->regs_info[0], ~0, NULL, false);
+        trencoder_te_ctrl_postw(&te->regs_info[0], val);
+
+        timer_mod(te->dryrun_timer,
+                  qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 4 * NANOSECONDS_PER_SECOND);
+    } else {
+        /* Turn off tracing */
+        ARRAY_FIELD_DP32(te->regs, TR_TE_CONTROL, INST_TRACING, 0);
+        ARRAY_FIELD_DP32(te->regs, TR_TE_CONTROL, ENABLE, 0);
+
+        val = register_read(&te->regs_info[0], ~0, NULL, false);
+        trencoder_te_ctrl_postw(&te->regs_info[0], val);
+
+        timer_del(te->dryrun_timer);
+    }
+}
+
 static void trencoder_realize(DeviceState *dev, Error **errp)
 {
     TraceEncoder *te = TRACE_ENCODER(dev);
@@ -348,6 +377,13 @@ static void trencoder_realize(DeviceState *dev, Error **errp)
     if (te->tracelog) {
         trace_out_file = g_strdup_printf("rv-etrace-cpu%d.dat", te->cpu_id);
         te->trace_out = fopen(trace_out_file, "w");
+    }
+
+    if (te->dryrun) {
+        te->dryrun_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &trencoder_dryrun_cb, te);
+
+        timer_mod(te->dryrun_timer,
+                  qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 2 * NANOSECONDS_PER_SECOND);
     }
 }
 
@@ -601,6 +637,8 @@ static const Property trencoder_props[] = {
     DEFINE_PROP_INT32("cpu-id", TraceEncoder, cpu_id, 0),
 
     DEFINE_PROP_BOOL("trace-log", TraceEncoder, tracelog, false),
+
+    DEFINE_PROP_BOOL("dry-run", TraceEncoder, dryrun, false),
 };
 
 static const VMStateDescription vmstate_trencoder = {

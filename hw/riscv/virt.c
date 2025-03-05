@@ -2171,6 +2171,11 @@ static void virt_init_socket_trace_hw(RISCVVirtState *s, int socket_num)
         object_property_set_link(OBJECT(trencoder), "cpu",
                                  OBJECT(cpu_ptr), &error_fatal);
         object_property_set_int(OBJECT(trencoder), "cpu-id", cpu, &error_fatal);
+
+        if (cpu == 0) {
+            object_property_set_bool(OBJECT(trencoder), "dry-run", true, &error_fatal);
+        }
+
         object_property_set_uint(OBJECT(trencoder), "baseaddr",
                                  trencoder_addr, &error_fatal);
         object_property_set_uint(OBJECT(trencoder), "dest-baseaddr",

@@ -48,6 +48,9 @@ struct TraceEncoder {
     bool trace_next_insn;
 
     bool tracelog;
+
+    bool dryrun;
+    QEMUTimer *dryrun_timer;
 };
 
 #define TYPE_TRACE_ENCODER "trace-encoder"
