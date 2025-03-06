@@ -371,3 +371,121 @@ size_t rv_etrace_gen_encoded_format1(uint8_t *buf,
 
     return HEADER_SIZE + header.length;
 }
+
+static const char* itrace_csv_fmt = \
+".packet.srcid_bytes_p,%d\n"
+".packet.tstamp_bytes_p,%d\n"
+".packet.type_width_p,%d\n"
+".itrace.arch_p,%d\n"
+".itrace.blocks_p,%d\n"
+".itrace.bpred_size_p,%d\n"
+".itrace.cache_size_p,%d\n"
+".itrace.call_counter_size_p,%d\n"
+".itrace.ctype_width_p,%d\n"
+".itrace.context_width_p,%d\n"
+".itrace.time_width_p,%d\n"
+".itrace.ecause_width_p,%d\n"
+".itrace.f0s_width_p,%d\n"
+".itrace.filter_context_p,%d\n"
+".itrace.filter_time_p,%d\n"
+".itrace.filter_excint_p,%d\n"
+".itrace.filter_privilege_p,%d\n"
+".itrace.filter_tval_p,%d\n"
+".itrace.iaddress_lsb_p,%d\n"
+".itrace.iaddress_width_p,%d\n"
+".itrace.iretire_width_p,%d\n"
+".itrace.ilastsize_width_p,%d\n"
+".itrace.itype_width_p,%d\n"
+".itrace.nocontext_p,%d\n"
+".itrace.notime_p,%d\n"
+".itrace.privilege_width_p,%d\n"
+".itrace.retires_p,%d\n"
+".itrace.return_stack_size_p,%d\n"
+".itrace.sijump_p,%d\n"
+".itrace.impdef_width_p,%d\n";
+
+static char *rv_etrace_csv_file_contents(struct rv_etrace_packet_params *packet,
+                                         struct rv_etrace_itrace_params *itrace)
+{
+    char *ret = g_strdup_printf(itrace_csv_fmt,
+        packet->srcid_bytes_p,
+        packet->tstamp_bytes_p,
+        packet->type_width_p,
+        itrace->arch_p,
+        itrace->blocks_p,
+        itrace->bpred_size_p,
+        itrace->cache_size_p,
+        itrace->call_counter_size_p,
+        itrace->ctype_width_p,
+        itrace->context_width_p,
+        itrace->time_width_p,
+        itrace->ecause_width_p,
+        itrace->f0s_width_p,
+        itrace->filter_context_p,
+        itrace->filter_time_p,
+        itrace->filter_excint_p,
+        itrace->filter_privilege_p,
+        itrace->filter_tval_p,
+        itrace->iaddress_lsb_p,
+        itrace->iaddress_width_p,
+        itrace->iretire_width_p,
+        itrace->ilastsize_width_p,
+        itrace->itype_width_p,
+        itrace->nocontext_p,
+        itrace->notime_p,
+        itrace->privilege_width_p,
+        itrace->retires_p,
+        itrace->return_stack_size_p,
+        itrace->sijump_p,
+        itrace->impdef_width_p
+    );
+
+    return ret;
+}
+
+void rv_etrace_create_csv_file(void)
+{
+    const char *csv_filename = "itrace_params_qemu.csv";
+    g_autofree char *csv_contents = NULL;
+    struct rv_etrace_packet_params packet;
+    struct rv_etrace_itrace_params itrace;
+    FILE *csv_file;
+
+    packet.srcid_bytes_p = 0;
+    packet.tstamp_bytes_p = 0;
+    packet.type_width_p = 0;
+
+    itrace.arch_p = 0;
+    itrace.blocks_p = 0;
+    itrace.bpred_size_p = 5;
+    itrace.cache_size_p = 0;
+    itrace.call_counter_size_p = 1;
+    itrace.ctype_width_p = 0;
+    itrace.context_width_p = 0;
+    itrace.time_width_p = 0;
+    itrace.ecause_width_p = 6;
+    itrace.f0s_width_p = 1;
+    itrace.filter_context_p = 0;
+    itrace.filter_time_p = 0;
+    itrace.filter_excint_p = 0;
+    itrace.filter_privilege_p = 0;
+    itrace.filter_tval_p = 0;
+    itrace.iaddress_lsb_p = 0;
+    itrace.iaddress_width_p = 64;
+    itrace.iretire_width_p = 0;
+    itrace.ilastsize_width_p = 1;
+    itrace.itype_width_p = 0;
+    itrace.nocontext_p = 1;
+    itrace.notime_p = 1;
+    itrace.privilege_width_p = 3;
+    itrace.retires_p = 1;
+    itrace.return_stack_size_p = 1;
+    itrace.sijump_p = 0;
+    itrace.impdef_width_p = 0;
+
+    csv_contents = rv_etrace_csv_file_contents(&packet, &itrace);
+
+    csv_file = fopen(csv_filename, "w");
+    fprintf(csv_file, "%s", csv_contents);
+    fclose(csv_file);
+}

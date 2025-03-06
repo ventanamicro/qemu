@@ -384,6 +384,8 @@ static void trencoder_realize(DeviceState *dev, Error **errp)
 
         timer_mod(te->dryrun_timer,
                   qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 2 * NANOSECONDS_PER_SECOND);
+
+        rv_etrace_create_csv_file();
     }
 }
 
