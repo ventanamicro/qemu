@@ -68,6 +68,9 @@ struct RISCVVirtState {
     OnOffAuto iommu_sys;
     uint16_t pci_iommu_bdf;
     uint32_t sysmsi_gsi_base;
+
+    bool trace_log;
+    bool trace_dryrun;
 };
 
 enum {

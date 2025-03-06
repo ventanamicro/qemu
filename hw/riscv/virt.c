@@ -2172,7 +2172,11 @@ static void virt_init_socket_trace_hw(RISCVVirtState *s, int socket_num)
                                  OBJECT(cpu_ptr), &error_fatal);
         object_property_set_int(OBJECT(trencoder), "cpu-id", cpu, &error_fatal);
 
-        if (cpu == 0) {
+        if (s->trace_log) {
+            object_property_set_bool(OBJECT(trencoder), "trace-log", true, &error_fatal);
+        }
+
+        if (s->trace_dryrun && cpu == 0) {
             object_property_set_bool(OBJECT(trencoder), "dry-run", true, &error_fatal);
         }
 
@@ -2590,6 +2594,35 @@ static void virt_set_reri(Object *obj, bool value, Error **errp)
     s->have_reri = value;
 }
 
+
+static bool virt_get_trace_log(Object *obj, Error **errp)
+{
+    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
+
+    return s->trace_log;
+}
+
+static void virt_set_trace_log(Object *obj, bool value, Error **errp)
+{
+    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
+
+    s->trace_log = value;
+}
+
+static bool virt_get_trace_dryrun(Object *obj, Error **errp)
+{
+    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
+
+    return s->trace_dryrun;
+}
+
+static void virt_set_trace_dryrun(Object *obj, bool value, Error **errp)
+{
+    RISCVVirtState *s = RISCV_VIRT_MACHINE(obj);
+
+    s->trace_dryrun = value;
+}
+
 bool virt_is_acpi_enabled(RISCVVirtState *s)
 {
     return s->acpi != ON_OFF_AUTO_OFF;
@@ -2738,6 +2771,14 @@ static void virt_machine_class_init(ObjectClass *oc, const void *data)
     object_class_property_set_description(oc, "reri",
                                           "Set on/off to enable/disable "
                                           "RERI support");
+
+    object_class_property_add_bool(oc, "trace-log",
+                                   virt_get_trace_log,
+                                   virt_set_trace_log);
+
+    object_class_property_add_bool(oc, "trace-dryrun",
+                                   virt_get_trace_dryrun,
+                                   virt_set_trace_dryrun);
 }
 
 static const TypeInfo virt_machine_typeinfo = {
