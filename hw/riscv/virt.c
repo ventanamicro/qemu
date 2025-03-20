@@ -1381,6 +1381,7 @@ static void create_fdt_rpmi_hsm(RISCVVirtState *s, uint64_t shmem_base,
     g_free(name);
 }
 
+
 static void create_fdt_rpmi_cppc(RISCVVirtState *s, uint64_t shmem_base,
                                  uint32_t rpmi_mbox_handle)
 {
@@ -1469,6 +1470,7 @@ static void create_fdt_sbi_mpxy_sysmsi(RISCVVirtState *s, uint32_t *phandle,
     g_free(name);
 }
 
+
 static void create_fdt_sbi_mpxy_clk(RISCVVirtState *s, uint32_t mpxy_mbox_phandle)
 {
     char *name;
@@ -1481,6 +1483,7 @@ static void create_fdt_sbi_mpxy_clk(RISCVVirtState *s, uint32_t mpxy_mbox_phandl
     qemu_fdt_setprop_cells(mc->fdt, name, "mboxes", mpxy_mbox_phandle, 0x1001, 0x0);
     g_free(name);
 }
+
 
 static void create_fdt_rpmi_sysmsi(RISCVVirtState *s, uint64_t shmem_base,
                                    uint32_t rpmi_mbox_handle)
@@ -1561,7 +1564,7 @@ static void finalize_fdt(RISCVVirtState *s)
     int i, base_hartid = -1, hart_count = 0;
     int rpmi_xports = riscv_socket_count(ms) + 1;
     bool soc_xport_type = 0;
-    uint64_t harts_mask;
+    //uint64_t harts_mask;
 
     cpu_phandles = g_new0(uint32_t, ms->smp.cpus);
 
@@ -1586,12 +1589,13 @@ static void finalize_fdt(RISCVVirtState *s)
         uint32_t shm_sz, db_sz, fcm_sz;
         uint64_t shm_base, db_base, fcm_base;
 
+        rpmi_xports = 2;
         for (i = 0; i < rpmi_xports; i++) {
             qemu_log_mask(LOG_GUEST_ERROR,
                           "%s: i: %x\n ", __func__, i);
 
             if (i == (rpmi_xports - 1)) {
-                harts_mask = 0;
+                //harts_mask = 0;
                 soc_xport_type = true;
                 shm_base = s->memmap[VIRT_RPMI_SOC_SHMEM].base;
                 shm_sz = s->memmap[VIRT_RPMI_SOC_SHMEM].size;
@@ -1619,7 +1623,7 @@ static void finalize_fdt(RISCVVirtState *s)
                     exit(1);
                 }
 
-                harts_mask = MAKE_64BIT_MASK(base_hartid, hart_count);
+                //harts_mask = MAKE_64BIT_MASK(base_hartid, hart_count);
                 soc_xport_type = false;
                 shm_sz = s->memmap[VIRT_RPMI_SHMEM].size / BIT(imsic_num_bits(rpmi_xports - 1));
                 shm_base = s->memmap[VIRT_RPMI_SHMEM].base + i * shm_sz;
@@ -1639,11 +1643,13 @@ static void finalize_fdt(RISCVVirtState *s)
             riscv_rpmi_create(db_base, shm_base, shm_sz,
                               a2preq_qsz, p2areq_qsz,
                               fcm_base, fcm_sz,
-                              harts_mask, soc_xport_type, ms);
+                              base_hartid, hart_count, soc_xport_type, ms);
         }
     } else {
         create_fdt_reset(s, virt_memmap, &phandle);
     }
+
+    riscv_rpmi_init();
 
     if (s->have_reri) {
         create_reri_nodes(s, &phandle, cpu_phandles);
@@ -1933,7 +1939,7 @@ static void virt_build_smbios(RISCVVirtState *s)
 
 static void virt_power_down(Notifier *notifier, void *data)
 {
-    riscv_rpmi_inject_sysmsi(RPMI_SYS_MSI_SHUTDOWN_INDEX);
+    vmsrun_rpmi_inject_sysmsi(RPMI_SYS_MSI_SHUTDOWN_INDEX);
 }
 
 static void virt_machine_done(Notifier *notifier, void *data)
@@ -2416,11 +2422,11 @@ static char *virt_get_rpmi_sysmsi_inject(Object *obj, Error **errp)
 static void virt_set_rpmi_sysmsi_inject(Object *obj, const char *val, Error **errp)
 {
     if (!strcmp(val, "shutdown")) {
-        riscv_rpmi_inject_sysmsi(RPMI_SYS_MSI_SHUTDOWN_INDEX);
+        vmsrun_rpmi_inject_sysmsi(RPMI_SYS_MSI_SHUTDOWN_INDEX);
     } else if (!strcmp(val, "reboot")) {
-        riscv_rpmi_inject_sysmsi(RPMI_SYS_MSI_REBOOT_INDEX);
+        vmsrun_rpmi_inject_sysmsi(RPMI_SYS_MSI_REBOOT_INDEX);
     } else if (!strcmp(val, "suspend")) {
-        riscv_rpmi_inject_sysmsi(RPMI_SYS_MSI_SUSPEND_INDEX);
+        vmsrun_rpmi_inject_sysmsi(RPMI_SYS_MSI_SUSPEND_INDEX);
     } else {
         error_setg(errp, "Invalid RPMI system MSI injection type");
         error_append_hint(errp, "Valid values are shutdown, reboot "

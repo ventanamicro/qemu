@@ -26,6 +26,7 @@
 
 #include "hw/sysbus.h"
 #include "qom/object.h"
+#include "vmsrun.h"
 
 #define TYPE_RISCV_RPMI "riscv.riscv.rpmi"
 
@@ -73,10 +74,11 @@ void riscv_rpmi_inject_sysmsi(uint32_t sys_msi_index);
 
 DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
                                uint32_t a2preq_qsz, uint32_t p2areq_qsz,
-                               hwaddr fcm_addr, int fcm_sz,
-                               uint64_t harts_mask, uint32_t flags,
+                               hwaddr fcm_addr, int fcm_sz, uint32_t base_hartid,
+                               uint32_t hart_count, bool rpmi_context_system,
                                MachineState *ms);
 
+void riscv_rpmi_init(void);
 void handle_rpmi_event(void);
 
 #endif
