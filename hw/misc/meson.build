@@ -35,25 +35,21 @@ system_ss.add(when: 'CONFIG_SIFIVE_E_AON', if_true: files('sifive_e_aon.c'))
 system_ss.add(when: 'CONFIG_SIFIVE_U_OTP', if_true: files('sifive_u_otp.c'))
 system_ss.add(when: 'CONFIG_SIFIVE_U_PRCI', if_true: files('sifive_u_prci.c'))
 specific_ss.add(when: 'CONFIG_RISCV_RPMI', if_true: files(
-  'riscv_rpmi.c',
-  'riscv_rpmi_clock.c',
-  'riscv_rpmi_cppc.c',
-  'riscv_rpmi_env.c',
-  'riscv_rpmi_hsm.c',
-  'riscv_rpmi_sysmsi.c',
-  'riscv_rpmi_sysreset.c',
-  'riscv_rpmi_syssusp.c',
-  'librpmi/lib/rpmi_context.c',
-  'librpmi/lib/rpmi_hsm.c',
-  'librpmi/lib/rpmi_service_group_clock.c',
-  'librpmi/lib/rpmi_service_group_cppc.c',
-  'librpmi/lib/rpmi_service_group_hsm.c',
-  'librpmi/lib/rpmi_service_group_sysmsi.c',
-  'librpmi/lib/rpmi_service_group_sysreset.c',
-  'librpmi/lib/rpmi_service_group_syssusp.c',
-  'librpmi/lib/rpmi_shmem.c',
-  'librpmi/lib/rpmi_transport.c',
-  'librpmi/lib/rpmi_transport_shmem.c'))
+  'riscv_vmsrun.c',
+  'vmsrun/lib/librpmi/lib/rpmi_context.c',
+  'vmsrun/lib/librpmi/lib/rpmi_hsm.c',
+  'vmsrun/lib/librpmi/lib/rpmi_service_group_clock.c',
+  'vmsrun/lib/librpmi/lib/rpmi_service_group_cppc.c',
+  'vmsrun/lib/librpmi/lib/rpmi_service_group_hsm.c',
+  'vmsrun/lib/librpmi/lib/rpmi_service_group_sysmsi.c',
+  'vmsrun/lib/librpmi/lib/rpmi_service_group_sysreset.c',
+  'vmsrun/lib/librpmi/lib/rpmi_service_group_syssusp.c',
+  'vmsrun/lib/librpmi/lib/rpmi_shmem.c',
+  'vmsrun/lib/librpmi/lib/rpmi_transport.c',
+  'vmsrun/lib/librpmi/lib/rpmi_transport_shmem.c',
+  'vmsrun/lib/vmsrun_main.c',
+  'vmsrun/lib/vmsrun_config.c',
+  'vmsrun/lib/vmsrun_librpmi.c'))
 
 subdir('macio')
 
