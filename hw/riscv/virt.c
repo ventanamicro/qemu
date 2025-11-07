@@ -107,6 +107,8 @@ static const MemMapEntry virt_memmap[] = {
     [VIRT_RPMI_DOORBELL] = { 0x10230000,       0x10000 },
     [VIRT_RPMI_SOC_SHMEM] = { 0x10240000,      0xF000 },
     [VIRT_RPMI_SOC_DOORBELL] = { 0x1024F000,   0x1000 },
+    [VIRT_RPMI_PERF_SHMEM] =    { 0x10300000,      0x10000 },
+    [VIRT_RPMI_PERF_DOORBELL] = { 0x10310000,      0x1000 },
     [VIRT_FLASH] =        { 0x20000000,     0x4000000 },
     [VIRT_IMSIC_M] =      { 0x24000000, VIRT_IMSIC_MAX_SIZE },
     [VIRT_IMSIC_S] =      { 0x28000000, VIRT_IMSIC_MAX_SIZE },
@@ -294,6 +296,7 @@ static void create_fdt_socket_cpus(RISCVVirtState *s, int socket,
                                   cpu_ptr->cfg.cbop_blocksize);
         }
 
+        qemu_fdt_setprop_cells(ms->fdt, cpu_name, "performance-domains", 0xe, 0);
         qemu_fdt_setprop_string(ms->fdt, cpu_name, "compatible", "riscv");
         qemu_fdt_setprop_string(ms->fdt, cpu_name, "status", "okay");
         qemu_fdt_setprop_cell(ms->fdt, cpu_name, "reg",
@@ -1368,6 +1371,59 @@ static void create_fdt_rpmi_sysmsi(RISCVVirtState *s, uint64_t shmem_base,
     g_free(name);
 }
 
+static void create_fdt_sbi_secure(RISCVVirtState *s, uint32_t mpxy_mbox_phandle)
+{
+    char *name;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/riscv-rpmi-starfive-secure");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv-rpmi-starfive-secure");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes", mpxy_mbox_phandle, 0x1005, 0x0);
+    g_free(name);
+}
+
+static void create_fdt_sbi_mpxy_device_power(RISCVVirtState *s, uint32_t mpxy_mbox_phandle)
+{
+    char *name;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/rpmi-device-power");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,rpmi-device-power");
+    qemu_fdt_setprop_cell(mc->fdt, name, "#power-domain-cells", 1);
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes", mpxy_mbox_phandle, 0x1002, 0x0);
+    g_free(name);
+}
+
+static void create_fdt_sbi_mpxy_performance(RISCVVirtState *s, uint32_t *phandle,
+                                            uint32_t mpxy_mbox_phandle)
+{
+    char *name;
+    MachineState *mc = MACHINE(s);
+    uint32_t performance_phandle = (*phandle)++;
+
+    name = g_strdup_printf("/soc/rpmi-performance");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,rpmi-performance");
+    qemu_fdt_setprop_cell(mc->fdt, name, "phandle", performance_phandle);
+    qemu_fdt_setprop_cell(mc->fdt, name, "#performance-domain-cells", 1);
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes", mpxy_mbox_phandle, 0x1003, 0x0);
+    g_free(name);
+}
+
+static void create_fdt_sbi_mpxy_voltage(RISCVVirtState *s, uint32_t mpxy_mbox_phandle)
+{
+    char *name;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/rpmi-voltage");
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible", "riscv,rpmi-voltage");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes", mpxy_mbox_phandle, 0x1004, 0x0);
+    g_free(name);
+}
+
 static void create_fdt_rpmi_clock(RISCVVirtState *s, uint64_t shmem_base,
                                   uint32_t rpmi_mbox_handle)
 {
@@ -1387,6 +1443,82 @@ static void create_fdt_rpmi_clock(RISCVVirtState *s, uint64_t shmem_base,
     g_free(name);
 }
 
+static void create_fdt_rpmi_device_power(RISCVVirtState *s, uint64_t shmem_base,
+                                         uint32_t rpmi_mbox_handle)
+{
+    char *name;
+    uint32_t device_power_servicegrp = 9;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/mailbox@%lx/device_power@%lx",
+                           (long)shmem_base,
+                           (long)device_power_servicegrp);
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible",
+                            "riscv,rpmi-mpxy-device-power");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
+                           rpmi_mbox_handle, device_power_servicegrp);
+    qemu_fdt_setprop_cell(mc->fdt,  name, "riscv,sbi-mpxy-channel-id", 0x1002);
+    g_free(name);
+}
+
+static void create_fdt_rpmi_performance(RISCVVirtState *s, uint64_t shmem_base,
+                                        uint32_t rpmi_mbox_handle)
+{
+    char *name;
+    uint32_t performance_servicegrp = 10;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/mailbox@%lx/performance@%lx",
+                           (long)shmem_base,
+                           (long)performance_servicegrp);
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible",
+                            "riscv,rpmi-mpxy-performance");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
+            rpmi_mbox_handle, performance_servicegrp);
+    qemu_fdt_setprop_cell(mc->fdt,  name, "riscv,sbi-mpxy-channel-id", 0x1003);
+    g_free(name);
+}
+
+static void create_fdt_rpmi_voltage(RISCVVirtState *s, uint64_t shmem_base,
+                                    uint32_t rpmi_mbox_handle)
+{
+    char *name;
+    uint32_t voltage_servicegrp = 7;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/mailbox@%lx/voltage@%lx",
+                           (long)shmem_base,
+                           (long)voltage_servicegrp);
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible",
+                            "riscv,rpmi-mpxy-voltage");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
+            rpmi_mbox_handle, voltage_servicegrp);
+    qemu_fdt_setprop_cell(mc->fdt,  name, "riscv,sbi-mpxy-channel-id", 0x1004);
+    g_free(name);
+}
+
+static void create_fdt_rpmi_secure(RISCVVirtState *s, uint64_t shmem_base,
+                                   uint32_t rpmi_mbox_handle)
+{
+    char *name;
+    uint32_t starfive_secure_servicegrp = 0x8000;
+    MachineState *mc = MACHINE(s);
+
+    name = g_strdup_printf("/soc/mailbox@%lx/secure@%lx",
+                           (long)shmem_base,
+                           (long)starfive_secure_servicegrp);
+    qemu_fdt_add_subnode(mc->fdt, name);
+    qemu_fdt_setprop_string(mc->fdt, name, "compatible",
+                            "riscv,rpmi-mpxy-starfive-secure");
+    qemu_fdt_setprop_cells(mc->fdt, name, "mboxes",
+                           rpmi_mbox_handle, starfive_secure_servicegrp);
+    qemu_fdt_setprop_cell(mc->fdt,  name, "riscv,sbi-mpxy-channel-id", 0x1005);
+    g_free(name);
+}
+
 static void create_fdt_rpmi_nodes(RISCVVirtState *s, int xport_id,
                                   uint64_t shmem_base, uint64_t db_base,
                                   uint32_t msi_phandle, uint32_t *phandle,
@@ -1403,9 +1535,17 @@ static void create_fdt_rpmi_nodes(RISCVVirtState *s, int xport_id,
         create_fdt_rpmi_suspend(s, shmem_base, rpmi_mbox_handle);
         create_fdt_rpmi_sysmsi(s, shmem_base, rpmi_mbox_handle);
         create_fdt_rpmi_clock(s, shmem_base, rpmi_mbox_handle);
+        create_fdt_rpmi_device_power(s, shmem_base, rpmi_mbox_handle);
+        create_fdt_rpmi_performance(s, shmem_base, rpmi_mbox_handle);
+        create_fdt_rpmi_voltage(s, shmem_base, rpmi_mbox_handle);
+        create_fdt_rpmi_secure(s, shmem_base, rpmi_mbox_handle);
         create_fdt_sbi_mbox(s, phandle, msi_phandle, &mbox_phandle);
         create_fdt_sbi_mpxy_sysmsi(s, phandle, msi_phandle, mbox_phandle);
         create_fdt_sbi_mpxy_clk(s, mbox_phandle);
+        create_fdt_sbi_mpxy_device_power(s, mbox_phandle);
+        create_fdt_sbi_mpxy_performance(s, phandle, mbox_phandle);
+        create_fdt_sbi_mpxy_voltage(s, mbox_phandle);
+        create_fdt_sbi_secure(s, mbox_phandle);
     } else {
         /* Socket transport will have rest of the no system service groups */
         create_fdt_rpmi_hsm(s, shmem_base, rpmi_mbox_handle);
@@ -1648,6 +1788,10 @@ static void finalize_fdt(RISCVVirtState *s)
                               a2preq_qsz, p2areq_qsz,
                               fcm_base, fcm_sz,
                               harts_mask, soc_xport_type, ms);
+
+            if (!soc_xport_type) {
+                rpmi_perf_init(s->memmap[VIRT_RPMI_PERF_SHMEM].base, s->memmap[VIRT_RPMI_PERF_DOORBELL].base, 0);
+            }
         }
     } else {
         create_fdt_reset(s, &phandle);

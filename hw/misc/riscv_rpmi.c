@@ -51,6 +51,9 @@ int add_cppc_group(struct rpmi_context *rctx,
                    uint64_t harts_mask,
                    uint64_t perf_request_shmem_offset,
                    uint64_t perf_feedback_shmem_offset);
+int add_device_power_group(struct rpmi_context *rctx);
+int add_performance_group(struct rpmi_context *pctx);
+int add_voltage_group(struct rpmi_context *pctx);
 void *get_soc_hsm_context(void);
 struct rpmi_shmem *rpmi_shmem_qemu_create(const char *name, rpmi_uint64_t base,
                                             rpmi_uint32_t size);
@@ -258,6 +261,15 @@ int init_rpmi_svc_groups(hwaddr shm_addr, int shm_sz,
 
         /* create rpmi clock service group */
         add_clock_group(rctx);
+
+        /* create rpmi device power service group */
+        add_device_power_group(rctx);
+
+        /* create rpmi performance service group */
+        add_performance_group(rctx);
+
+        /* create rpmi voltage service group */
+        add_voltage_group(rctx);
     }
 
     /* save the context */

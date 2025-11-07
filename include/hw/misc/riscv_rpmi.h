@@ -27,13 +27,22 @@
 #include "hw/sysbus.h"
 #include "qom/object.h"
 
-#define TYPE_RISCV_RPMI "riscv.riscv.rpmi"
+#define TYPE_RISCV_RPMI             "riscv.riscv.rpmi"
+#define TYPE_RISCV_RPMI_PERF        "riscv.riscv.rpmi.perf"
+#define TYPE_RISCV_RPMI_PERF_SHMEM  "riscv.riscv.rpmi.perf.shmem"
 
 #define RISCV_RISCV_RPMI(obj) \
     OBJECT_CHECK(RiscvRpmiState, (obj), TYPE_RISCV_RPMI)
 typedef struct RiscvRpmiState RiscvRpmiState;
 DECLARE_INSTANCE_CHECKER(RiscvRpmiState, RISCV_RPMI,
                          TYPE_RISCV_RPMI)
+
+#define RISCV_RISCV_RPMI_PERF(obj) \
+    OBJECT_CHECK(RiscvRpmiPerfState, (obj), TYPE_RISCV_RPMI_PERF)
+typedef struct RiscvRpmiPerfState RiscvRpmiPerfState;
+DECLARE_INSTANCE_CHECKER(RiscvRpmiPerfState, RISCV_RPMI_PERF,
+                         TYPE_RISCV_RPMI_PERF)
+
 #define __UNUSED__     __attribute__ ((unused))
 
 #define MAX_HARTS 64
@@ -51,6 +60,13 @@ DECLARE_INSTANCE_CHECKER(RiscvRpmiState, RISCV_RPMI,
 #define RPMI_SYS_MSI_SUSPEND_INDEX 2
 #define RPMI_SYS_MSI_P2A_DB_INDEX 3
 #define RPMI_SYS_NUM_MSI 4
+
+struct RiscvRpmiPerfState {
+    SysBusDevice parent_obj;
+    MemoryRegion mmio;
+    MemoryRegion ram;
+    uint8_t *ram_ptr;
+};
 
 struct RiscvRpmiState {
     /*< private >*/
@@ -78,5 +94,7 @@ DeviceState *riscv_rpmi_create(hwaddr db_addr, hwaddr shm_addr, int shm_sz,
                                MachineState *ms);
 
 void handle_rpmi_event(void);
+
+DeviceState *rpmi_perf_init(hwaddr base_shmem, hwaddr base_db, void *data);
 
 #endif

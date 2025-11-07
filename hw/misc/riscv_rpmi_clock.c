@@ -109,7 +109,7 @@ enum rpmi_error platform_set_state(void *priv,
     if (clk_id > RPMI_CLOCK_COUNT)
         return RPMI_ERR_INVALID_PARAM;
 
-    if (state >= RPMI_CLK_STATE_MAX_IDX)
+    if (state >= RPMI_CLK_STATE_MAX)
         return RPMI_ERR_INVALID_PARAM;
 
     platclks_ctx[clk_id].current_state = state;
