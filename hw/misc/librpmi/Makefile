@@ -99,7 +99,7 @@ GENFLAGS	=	-Wall -Werror -g
 GENFLAGS	+=	-I$(include_dir) -I$(lib_dir)
 
 ifeq ($(LIBRPMI_DEBUG),y)
-GENFLAGS 	+=	 -O0 -DDEBUG
+GENFLAGS 	+=	 -O0 -DLIBRPMI_DEBUG
 else
 GENFLAGS 	+=	 -O2
 endif
@@ -216,6 +216,8 @@ clean:
 	$(CMD_PREFIX)find $(build_dir) -type f -name "*.o" -exec rm -rf {} +
 	$(if $(V), @echo " RM        $(build_dir)/*.a")
 	$(CMD_PREFIX)find $(build_dir) -type f -name "*.a" -exec rm -rf {} +
+	$(if $(V), @echo " RM        $(build_dir)/*.o")
+	$(CMD_PREFIX)find $(build_dir) -type f -name "*.elf" -exec rm -rf {} +
 
 # Rule for "make distclean"
 .PHONY: distclean

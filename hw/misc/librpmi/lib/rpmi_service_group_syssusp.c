@@ -6,7 +6,7 @@
 
 #include <librpmi.h>
 
-#ifdef DEBUG
+#ifdef LIBRPMI_DEBUG
 #define DPRINTF(msg...)		rpmi_env_printf(msg)
 #else
 #define DPRINTF(msg...)
@@ -148,7 +148,7 @@ done:
 static struct rpmi_service rpmi_syssusp_services[RPMI_SYSSUSP_SRV_ID_MAX] = {
 	[RPMI_SYSRST_SRV_ENABLE_NOTIFICATION] = {
 		.service_id = RPMI_SYSRST_SRV_ENABLE_NOTIFICATION,
-		.min_a2p_request_datalen = 4,
+		.min_a2p_request_datalen = 8,
 		.process_a2p_request = NULL,
 	},
 	[RPMI_SYSSUSP_SRV_GET_ATTRIBUTES] = {

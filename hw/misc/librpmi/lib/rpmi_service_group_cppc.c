@@ -7,7 +7,7 @@
 
 #include <librpmi.h>
 
-#ifdef DEBUG
+#ifdef LIBRPMI_DEBUG
 #define DPRINTF(msg...)		rpmi_env_printf(msg)
 #else
 #define DPRINTF(msg...)
@@ -641,9 +641,9 @@ rpmi_cppc_sg_get_hart_list(struct rpmi_service_group *group,
 }
 
 static struct rpmi_service rpmi_cppc_services[RPMI_CPPC_SRV_ID_MAX] = {
-	[RPMI_CLK_SRV_ENABLE_NOTIFICATION] = {
-		.service_id = RPMI_CLK_SRV_ENABLE_NOTIFICATION,
-		.min_a2p_request_datalen = 4,
+	[RPMI_CPPC_SRV_ENABLE_NOTIFICATION] = {
+		.service_id = RPMI_CPPC_SRV_ENABLE_NOTIFICATION,
+		.min_a2p_request_datalen = 8,
 		.process_a2p_request = NULL,
 	},
 	[RPMI_CPPC_SRV_PROBE_REG] = {

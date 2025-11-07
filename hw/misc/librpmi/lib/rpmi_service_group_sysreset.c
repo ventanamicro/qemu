@@ -6,7 +6,7 @@
 
 #include <librpmi.h>
 
-#ifdef DEBUG
+#ifdef LIBRPMI_DEBUG
 #define DPRINTF(msg...)		rpmi_env_printf(msg)
 #else
 #define DPRINTF(msg...)
@@ -69,7 +69,6 @@ static enum rpmi_error rpmi_sysreset_do_reset(struct rpmi_service_group *group,
 					      rpmi_uint8_t *response_data)
 {
 	struct rpmi_sysreset_group *sgrst = group->priv;
-	rpmi_uint32_t *resp = (void *)response_data;
 	const rpmi_uint32_t *sysreset_type;
 	rpmi_uint32_t reset_type;
 
@@ -82,17 +81,13 @@ static enum rpmi_error rpmi_sysreset_do_reset(struct rpmi_service_group *group,
 		sgrst->ops->do_system_reset(sgrst->ops_priv, reset_type);
 	}
 
-	/* reset_type is invalid at this point */
-	*response_datalen = sizeof(*resp);
-	resp[0] = rpmi_to_xe32(trans->is_be, (rpmi_uint32_t)RPMI_ERR_INVALID_PARAM);
-
 	return RPMI_SUCCESS;
 }
 
 static struct rpmi_service rpmi_sysreset_services[RPMI_SYSRST_SRV_ID_MAX] = {
 	[RPMI_SYSRST_SRV_ENABLE_NOTIFICATION] = {
 		.service_id = RPMI_SYSRST_SRV_ENABLE_NOTIFICATION,
-		.min_a2p_request_datalen = 4,
+		.min_a2p_request_datalen = 8,
 		.process_a2p_request = NULL,
 	},
 	[RPMI_SYSRST_SRV_GET_ATTRIBUTES] = {
